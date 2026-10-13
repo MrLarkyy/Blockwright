@@ -37,7 +37,10 @@ render), render worker (video from a recorded packet stream).
   portal and the Fabric maven only. Gradle runs non-interactively (`--console=plain`).
 - The one exception: Mixin classes of the agent are thin Java classes (Mixin works on bytecode; `@Shadow`, accessors
   and final Kotlin classes are fragile). A mixin only hooks and delegates to Kotlin; no logic in it.
-- HTTP/WebSocket: Ktor. MCP: the official Kotlin MCP SDK. Serialization: kotlinx.serialization.
+- Orchestrator HTTP/WebSocket: Ktor with the CIO engine only. MCP: the official Kotlin MCP SDK. Serialization:
+  kotlinx.serialization.
+- The agent runs once per client, so every dependency is multiplied: no Ktor or other server/HTTP framework in it; its
+  control channel uses the JDK's `java.net.http` WebSocket client. A new agent dependency needs a measured memory cost.
 - One production top-level class/interface/object/enum per file, named like the file; package matches the folder.
 - Small classes and functions with one responsibility. No business logic in API routes or transport handlers.
 - Comments only for a non-obvious why, constraint or invariant.
