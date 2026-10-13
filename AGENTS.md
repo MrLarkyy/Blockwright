@@ -10,7 +10,7 @@ It tests servers, plugins, resource packs and networks from the player's side.
 |---|---|
 | `protocol` | the control protocol between orchestrator and agent: messages, serialization (shared by both sides) |
 | `launcher` | version manifest, downloads (client jar, libraries, assets, natives), cache, the patched ("baked") client jar, JVM launch profiles |
-| `agent` | the in-client agent (Fabric mod, Java/Kotlin): control, observation, detectors, capture |
+| `agent` | the in-client agent (Fabric mod, Kotlin via fabric-language-kotlin): control, observation, detectors, capture |
 | `orchestrator` | client pool, scenarios, detectors' events, artefact storage, HTTP/WebSocket API |
 | `mcp` | the MCP server, a thin adapter over the orchestrator API (the API is the source of truth) |
 | `cli` | the `blockwright` command: `run`, `serve`, `mcp`, `up`; bundled JRE via jlink |
@@ -33,8 +33,11 @@ render), render worker (video from a recorded packet stream).
 
 ## Code
 
-- Kotlin, JDK 25, Gradle Kotlin DSL multi-module; dependencies from Maven Central, the Gradle plugin portal and the
-  Fabric maven only. Gradle runs non-interactively (`--console=plain`).
+- **Everything is Kotlin**, JDK 25, Gradle Kotlin DSL multi-module; dependencies from Maven Central, the Gradle plugin
+  portal and the Fabric maven only. Gradle runs non-interactively (`--console=plain`).
+- The one exception: Mixin classes of the agent are thin Java classes (Mixin works on bytecode; `@Shadow`, accessors
+  and final Kotlin classes are fragile). A mixin only hooks and delegates to Kotlin; no logic in it.
+- HTTP/WebSocket: Ktor. MCP: the official Kotlin MCP SDK. Serialization: kotlinx.serialization.
 - One production top-level class/interface/object/enum per file, named like the file; package matches the folder.
 - Small classes and functions with one responsibility. No business logic in API routes or transport handlers.
 - Comments only for a non-obvious why, constraint or invariant.
