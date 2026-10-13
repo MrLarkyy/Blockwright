@@ -8,3 +8,5 @@ run/
 .env
 *.env
 local.properties
+AGENTS.md
+CLAUDE.md
