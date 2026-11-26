@@ -13,7 +13,7 @@ Blockwright is not an official Minecraft product and is not affiliated with Moja
 
 ## Build
 
-Requires JDK 25 (Gradle finds or provisions it through toolchains). Modules: `protocol`, `launcher`, `agent`,
+Gradle runs on JDK 17 or newer; the JDK 25 toolchain is found locally or downloaded automatically. Modules: `protocol`, `launcher`, `agent`,
 `orchestrator`, `mcp`, `cli`, `server-runner`.
 
 ```

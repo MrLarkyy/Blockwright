@@ -1,6 +1,5 @@
 import org.gradle.api.artifacts.VersionCatalogsExtension
 import org.gradle.api.tasks.testing.logging.TestLogEvent
-import org.jetbrains.kotlin.gradle.dsl.KotlinJvmCompilerOptions
 
 plugins {
     kotlin("jvm")
