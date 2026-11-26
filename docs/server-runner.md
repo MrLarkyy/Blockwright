@@ -42,15 +42,22 @@ metadata is capped at 4 MiB and 30 s, the jar at its declared size (hard maximum
 ## Test server defaults
 
 `online-mode=false`, `server-ip=127.0.0.1`, `server-port=<free loopback port>`, `enable-rcon=false`,
-`enable-query=false`, `enforce-secure-profile=false`. Other keys can be set with `propertyOverrides`; `online-mode`,
-`server-ip`, `server-port` and `enable-rcon` belong to the runner and are rejected (use `port` to pin the port).
+`management-server-host=127.0.0.1`, `enable-query=false`, `enforce-secure-profile=false`. Other keys can be set with
+`propertyOverrides`; `online-mode`, `server-ip`, `server-port`, `enable-rcon` and `management-server-host` belong to
+the runner and are rejected (use `port` to pin the port).
 
 ## Stopping and artefacts
 
 `stop()` sends `stop` to the console, waits `stopTimeout` (30 s), then kills the server and every descendant process.
-A JVM shutdown hook does the same if the owner never calls `stop()`. Afterwards `artifactDir` holds `console.log`
-(everything the server printed) and `latest.log` (Paper's own log); the run directory is removed unless `keepRunDir`
-is set (on Windows a directory still locked after the kill is kept and reported as `runDirKept`).
+An interrupted `stop()` skips the graceful wait, still kills and cleans up, and keeps the thread's interrupt flag.
+Afterwards `artifactDir` holds `console.log` (everything the server printed) and `latest.log` (Paper's own log); the
+run directory is removed unless `keepRunDir` is set (on Windows a directory still locked after the kill is kept and
+reported as `runDirKept`).
+
+If the owner never calls `stop()`, a JVM shutdown hook kills the server and its descendants without the graceful
+wait, keeps `latest.log` and removes the run directory. A hard kill of the owning JVM (`kill -9`, Task Manager, a
+crashed JVM) runs no hook: the Paper process and its `blockwright-paper-*` run directory in the temp folder can then
+be left behind and have to be removed by hand; the runner does not sweep for them yet.
 
 A start that fails (early exit, e.g. a port taken in the meantime, or no ready line within `readyTimeout`) throws
 `ServerStartException` with the exit code and the last console lines and leaves no process behind.
