@@ -1,0 +1,25 @@
+{
+  "schemaVersion": 1,
+  "profiles": {
+    "stub": {
+      "required": true,
+      "clients": 2,
+      "warmRuns": 2,
+      "idleSeconds": 2,
+      "activeSeconds": 2,
+      "screenshots": 10,
+      "startTimeoutSeconds": 60,
+      "budgets": {
+        "coldStartMs": 15000,
+        "warmStartMs": 15000,
+        "pssMiB": 256,
+        "cpuIdlePercent": 50,
+        "cpuActivePercent": 400,
+        "screenshotP95Ms": 2000
+      }
+    },
+    "logic": { "required": false },
+    "snapshot": { "required": false },
+    "live": { "required": false }
+  }
+}
