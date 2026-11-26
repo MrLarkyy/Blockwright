@@ -5,8 +5,11 @@ import java.nio.file.Path
 
 /** Writes `server.properties` for an offline, localhost-only test server. */
 object ServerProperties {
-    /** Keys the runner owns: a test server never runs online, never binds beyond localhost, never opens RCON. */
-    val PROTECTED_KEYS = setOf("online-mode", "server-ip", "server-port", "enable-rcon")
+    /**
+     * Keys the runner owns: a test server never runs online, never binds beyond localhost (game port and the
+     * management server alike), never opens RCON.
+     */
+    val PROTECTED_KEYS = setOf("online-mode", "server-ip", "server-port", "enable-rcon", "management-server-host")
 
     private val KEY = Regex("[a-z0-9][a-z0-9._-]{0,63}")
 
@@ -30,6 +33,7 @@ object ServerProperties {
         values["server-ip"] = "127.0.0.1"
         values["server-port"] = port.toString()
         values["enable-rcon"] = "false"
+        values["management-server-host"] = "127.0.0.1"
         return values.entries.joinToString("") { (key, value) -> "$key=${escape(value)}\n" }
     }
 

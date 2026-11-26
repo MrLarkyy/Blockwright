@@ -22,11 +22,12 @@ class ServerPropertiesTest {
         assertEquals("false", properties.getProperty("enable-rcon"))
         assertEquals("false", properties.getProperty("enable-query"))
         assertEquals("false", properties.getProperty("enforce-secure-profile"))
+        assertEquals("127.0.0.1", properties.getProperty("management-server-host"))
     }
 
     @Test
     fun protectedKeysCannotBeOverridden() {
-        listOf("online-mode", "server-ip", "server-port", "enable-rcon").forEach { key ->
+        listOf("online-mode", "server-ip", "server-port", "enable-rcon", "management-server-host").forEach { key ->
             assertThrows(IllegalArgumentException::class.java) { ServerProperties.render(25601, mapOf(key to "true")) }
         }
     }
