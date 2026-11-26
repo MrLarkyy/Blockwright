@@ -47,6 +47,8 @@ tasks.register<Test>("integrationTest") {
     outputs.upToDateWhen { false }
     outputs.doNotCacheIf("integration tests depend on external services") { true }
     providers.systemProperty("blockwright.it.cacheDir").orNull?.let { systemProperty("blockwright.it.cacheDir", it) }
+    // Accepting the Minecraft EULA is the user's explicit choice per run (-Pblockwright.acceptEula=true), never a default.
+    providers.gradleProperty("blockwright.acceptEula").orNull?.let { systemProperty("blockwright.acceptEula", it) }
     testLogging {
         events(TestLogEvent.PASSED, TestLogEvent.FAILED, TestLogEvent.SKIPPED)
     }
