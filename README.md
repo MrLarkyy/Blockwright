@@ -19,3 +19,5 @@ Gradle runs on JDK 17 or newer; the JDK 25 toolchain is found locally or downloa
 ```
 ./gradlew build
 ```
+
+Performance budgets and the benchmark harness: [docs/benchmark.md](docs/benchmark.md).
