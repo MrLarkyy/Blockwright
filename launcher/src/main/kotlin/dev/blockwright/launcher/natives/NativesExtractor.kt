@@ -24,7 +24,8 @@ import kotlin.io.path.deleteRecursively
  * replacement fails while a client of that version runs, which must not stop another client from resolving.
  *
  * Check and replacement run under one lock, so no reader holds a file open while the directory is swapped and a
- * staging or backup directory found there can only be the leftover of a crashed run.
+ * staging or backup directory found there can only be a leftover. Leftovers are removed as far as possible: one
+ * that cannot be deleted yet (a file in it still open) never fails an extraction, the next one tries again.
  */
 class NativesExtractor(private val limits: ExtractionLimits = ExtractionLimits()) {
     /** Returns [target], which always exists afterwards (empty when there is nothing to extract). */
@@ -35,16 +36,24 @@ class NativesExtractor(private val limits: ExtractionLimits = ExtractionLimits()
         target
     }
 
-    @OptIn(ExperimentalPathApi::class)
     private fun removeLeftovers(target: Path) {
         val prefixes = listOf("${target.fileName}$STAGING", "${target.fileName}$BACKUP")
         val leftovers = Files.list(target.parent).use { entries ->
             entries.filter { entry -> prefixes.any { entry.fileName.toString().startsWith(it) } }.toList()
         }
-        leftovers.forEach { it.deleteRecursively() }
+        leftovers.forEach(::discard)
     }
 
+    /** Deletes what it can of a staging or backup directory; the rest stays a leftover for the next extraction. */
     @OptIn(ExperimentalPathApi::class)
+    private fun discard(directory: Path) {
+        try {
+            directory.deleteRecursively()
+        } catch (_: IOException) {
+            // A leftover harms nothing, and failing here would replace the outcome of the extraction itself.
+        }
+    }
+
     private fun replace(jars: List<NativeJar>, target: Path, marker: NativesMarker) {
         Files.createDirectories(target.parent)
         val staging = target.resolveSibling("${target.fileName}$STAGING${UUID.randomUUID()}")
@@ -55,11 +64,10 @@ class NativesExtractor(private val limits: ExtractionLimits = ExtractionLimits()
             marker.write(staging)
             swap(staging, target)
         } finally {
-            staging.deleteRecursively()
+            discard(staging)
         }
     }
 
-    @OptIn(ExperimentalPathApi::class)
     private fun swap(staging: Path, target: Path) {
         val old = target.resolveSibling("${target.fileName}$BACKUP${UUID.randomUUID()}")
         val hadOld = Files.exists(target)
@@ -70,7 +78,7 @@ class NativesExtractor(private val limits: ExtractionLimits = ExtractionLimits()
             if (hadOld) runCatching { Files.move(old, target) }
             throw e
         }
-        if (hadOld) old.deleteRecursively()
+        if (hadOld) discard(old)
     }
 
     private fun moveDirectory(from: Path, to: Path) {

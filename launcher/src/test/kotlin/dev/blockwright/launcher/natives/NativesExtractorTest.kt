@@ -7,15 +7,18 @@ import org.junit.jupiter.api.Assertions.assertArrayEquals
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertTrue
+import org.junit.jupiter.api.Assumptions.assumeTrue
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows
 import org.junit.jupiter.api.io.TempDir
 import org.junit.jupiter.params.ParameterizedTest
 import org.junit.jupiter.params.provider.ValueSource
 import java.nio.channels.FileChannel
+import java.nio.file.FileSystems
 import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.StandardOpenOption
+import java.nio.file.attribute.PosixFilePermissions
 import java.util.concurrent.CyclicBarrier
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
@@ -27,6 +30,7 @@ class NativesExtractorTest {
     private val nativesRoot by lazy { dir.resolve("cache/natives") }
     private val target by lazy { nativesRoot.resolve("1.8.9") }
     private val lib = "native-library".toByteArray()
+    private val posix = "posix" in FileSystems.getDefault().supportedFileAttributeViews()
 
     private fun jar(name: String, vararg entries: Pair<String, ByteArray>): NativeJar {
         val path = TestZips.write(dir.resolve("libs/$name"), *entries)
@@ -39,6 +43,21 @@ class NativesExtractorTest {
         Files.createDirectories(file.parent)
         return Files.write(file, RUNTIME_LIBRARY)
     }
+
+    /**
+     * Makes [file] undeletable while its directory can still be renamed, as a library does that some process
+     * has loaded: no write permission on the directory (POSIX) or a read-only file (Windows).
+     */
+    private fun protect(file: Path) {
+        if (posix) Files.setPosixFilePermissions(file.parent, PosixFilePermissions.fromString("r-x------")) else file.toFile().setReadOnly()
+    }
+
+    private fun release(file: Path) {
+        if (posix) Files.setPosixFilePermissions(file.parent, PosixFilePermissions.fromString("rwx------")) else file.toFile().setWritable(true)
+    }
+
+    private fun backups(): List<Path> =
+        Files.list(nativesRoot).use { entries -> entries.filter { it.fileName.toString().startsWith("1.8.9.old-") }.toList() }
 
     /** Only the target (and its lock file) may remain: no staging or backup directory. */
     private fun assertNoLeftovers(allow: Set<String> = emptySet()) {
@@ -254,6 +273,48 @@ class NativesExtractorTest {
 
         assertNoLeftovers(allow = setOf(otherVersion.fileName.toString()))
         assertArrayEquals(lib, Files.readAllBytes(target.resolve("liblwjgl.so")))
+    }
+
+    @Test
+    fun leftoverThatCannotBeDeletedDoesNotFailExtraction() {
+        val jar = jar("lwjgl-natives.jar", "liblwjgl.so" to lib)
+        NativesExtractor().extract(listOf(jar), target)
+        val held = Files.createDirectories(nativesRoot.resolve("1.8.9.old-crashed")).resolve("held.dll")
+        Files.write(held, lib)
+        protect(held)
+        try {
+            NativesExtractor().extract(listOf(jar), target)
+            NativesExtractor().extract(listOf(jar), target)
+            assumeTrue(Files.exists(held), "this file system deletes a protected file")
+        } finally {
+            release(held)
+        }
+        assertArrayEquals(lib, Files.readAllBytes(target.resolve("liblwjgl.so")))
+
+        NativesExtractor().extract(listOf(jar), target)
+
+        assertNoLeftovers()
+    }
+
+    @Test
+    fun backupThatCannotBeDeletedDoesNotFailTheReplacement() {
+        NativesExtractor().extract(listOf(jar("old.jar", "old.so" to lib)), target)
+        val fresh = jar("new.jar", "new.so" to lib)
+        protect(target.resolve("old.so"))
+        try {
+            NativesExtractor().extract(listOf(fresh), target)
+        } finally {
+            if (Files.exists(target.resolve("old.so"))) release(target.resolve("old.so"))
+            backups().forEach { release(it.resolve("old.so")) }
+        }
+        assertTrue(Files.exists(target.resolve("new.so")))
+        assertFalse(Files.exists(target.resolve("old.so")))
+        assumeTrue(backups().isNotEmpty(), "this file system deletes a protected file")
+
+        NativesExtractor().extract(listOf(fresh), target)
+
+        assertTrue(Files.exists(target.resolve("new.so")))
+        assertNoLeftovers()
     }
 
     @Test
