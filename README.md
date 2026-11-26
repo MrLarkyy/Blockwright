@@ -10,3 +10,12 @@ Status: early development.
 
 The Minecraft client is downloaded from Mojang at runtime into your local cache; Blockwright never ships it.
 Blockwright is not an official Minecraft product and is not affiliated with Mojang or Microsoft.
+
+## Build
+
+Requires JDK 25 (Gradle finds or provisions it through toolchains). Modules: `protocol`, `launcher`, `agent`,
+`orchestrator`, `mcp`, `cli`, `server-runner`.
+
+```
+./gradlew build
+```
