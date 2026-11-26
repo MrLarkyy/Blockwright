@@ -1,0 +1,23 @@
+{
+  "latest": {"release": "1.0-test", "snapshot": "1.1-test-pre"},
+  "versions": [
+    {
+      "id": "1.1-test-pre",
+      "type": "snapshot",
+      "url": "https://piston-meta.mojang.com/v1/packages/0000000000000000000000000000000000000000/1.1-test-pre.json",
+      "time": "2026-02-01T00:00:00+00:00",
+      "releaseTime": "2026-02-01T00:00:00+00:00",
+      "sha1": "0000000000000000000000000000000000000000",
+      "complianceLevel": 1
+    },
+    {
+      "id": "1.0-test",
+      "type": "release",
+      "url": "https://piston-meta.mojang.com/v1/packages/fixture/1.0-test.json",
+      "time": "2026-01-01T00:00:00+00:00",
+      "releaseTime": "2026-01-01T00:00:00+00:00",
+      "sha1": "{{sha1:version}}",
+      "complianceLevel": 1
+    }
+  ]
+}

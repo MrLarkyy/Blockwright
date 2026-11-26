@@ -1,0 +1,65 @@
+{
+  "arguments": {
+    "game": ["--username", "${auth_player_name}", {"rules": [{"action": "allow", "features": {"is_demo_user": true}}], "value": "--demo"}],
+    "jvm": ["-Djava.library.path=${natives_directory}", "-cp", "${classpath}"]
+  },
+  "assetIndex": {
+    "id": "test-1",
+    "sha1": "{{sha1:assetIndex}}",
+    "size": {{size:assetIndex}},
+    "totalSize": 0,
+    "url": "https://piston-meta.mojang.com/v1/packages/fixture/test-1.json"
+  },
+  "assets": "test-1",
+  "complianceLevel": 1,
+  "downloads": {
+    "client": {
+      "sha1": "{{sha1:client}}",
+      "size": {{size:client}},
+      "url": "https://piston-data.mojang.com/v1/objects/fixture/client.jar"
+    }
+  },
+  "id": "1.0-test",
+  "javaVersion": {"component": "java-runtime-test", "majorVersion": 25},
+  "libraries": [
+    {
+      "downloads": {"artifact": {"path": "test/core/1.0/core-1.0.jar", "sha1": "{{sha1:core}}", "size": {{size:core}}, "url": "https://libraries.minecraft.net/test/core/1.0/core-1.0.jar"}},
+      "name": "test:core:1.0"
+    },
+    {
+      "downloads": {"artifact": {"path": "test/bridge/1.0/bridge-1.0.jar", "sha1": "1111111111111111111111111111111111111111", "size": 10, "url": "https://libraries.minecraft.net/test/bridge/1.0/bridge-1.0.jar"}},
+      "name": "test:bridge:1.0",
+      "rules": [{"action": "allow", "os": {"name": "osx"}}]
+    },
+    {
+      "downloads": {"artifact": {"path": "test/render/1.0/render-1.0-natives-linux.jar", "sha1": "{{sha1:renderLinux}}", "size": {{size:renderLinux}}, "url": "https://libraries.minecraft.net/test/render/1.0/render-1.0-natives-linux.jar"}},
+      "name": "test:render:1.0:natives-linux",
+      "rules": [{"action": "allow", "os": {"name": "linux"}}]
+    },
+    {
+      "downloads": {"artifact": {"path": "test/render/1.0/render-1.0-natives-windows.jar", "sha1": "2222222222222222222222222222222222222222", "size": 10, "url": "https://libraries.minecraft.net/test/render/1.0/render-1.0-natives-windows.jar"}},
+      "name": "test:render:1.0:natives-windows",
+      "rules": [{"action": "allow", "os": {"name": "windows"}}]
+    },
+    {
+      "downloads": {
+        "classifiers": {
+          "natives-linux": {"path": "test/legacy/2.9/legacy-2.9-natives-linux.jar", "sha1": "{{sha1:legacyLinux}}", "size": {{size:legacyLinux}}, "url": "https://libraries.minecraft.net/test/legacy/2.9/legacy-2.9-natives-linux.jar"},
+          "natives-windows-64": {"path": "test/legacy/2.9/legacy-2.9-natives-windows-64.jar", "sha1": "3333333333333333333333333333333333333333", "size": 10, "url": "https://libraries.minecraft.net/test/legacy/2.9/legacy-2.9-natives-windows-64.jar"}
+        }
+      },
+      "extract": {"exclude": ["META-INF/"]},
+      "name": "test:legacy:2.9",
+      "natives": {"linux": "natives-linux", "windows": "natives-windows-${arch}"}
+    },
+    {
+      "downloads": {"artifact": {"path": "test/util/1.0/util-1.0.jar", "sha1": "{{sha1:util}}", "size": {{size:util}}, "url": "https://libraries.minecraft.net/test/util/1.0/util-1.0.jar"}},
+      "name": "test:util:1.0"
+    }
+  ],
+  "mainClass": "test.client.Main",
+  "minimumLauncherVersion": 21,
+  "releaseTime": "2026-01-01T00:00:00+00:00",
+  "time": "2026-01-01T00:00:00+00:00",
+  "type": "release"
+}
