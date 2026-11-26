@@ -2,6 +2,7 @@ package dev.blockwright.launcher
 
 import dev.blockwright.launcher.cache.CacheLayout
 import dev.blockwright.launcher.download.DownloadException
+import dev.blockwright.launcher.download.DownloadPolicy
 import dev.blockwright.launcher.download.Sha1
 import dev.blockwright.launcher.platform.Platform
 import org.junit.jupiter.api.Assertions.assertArrayEquals
@@ -16,6 +17,7 @@ import org.junit.jupiter.api.io.TempDir
 import java.net.URI
 import java.nio.file.Files
 import java.nio.file.Path
+import java.time.Duration
 import java.util.concurrent.CyclicBarrier
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
@@ -29,7 +31,7 @@ class VersionResolverTest {
     private val cache by lazy { CacheLayout(root) }
     private val linux = Platform("linux", "x86_64", "6.8.0")
 
-    private fun resolver() = VersionResolver(cache, transport, platform = linux)
+    private fun resolver() = VersionResolver(cache, transport, DownloadPolicy(retryDelay = Duration.ZERO), platform = linux)
 
     private fun resolve(includeAssets: Boolean = false) = resolver().resolve(ResolveRequest(FakeMojang.VERSION_ID, includeAssets))
 

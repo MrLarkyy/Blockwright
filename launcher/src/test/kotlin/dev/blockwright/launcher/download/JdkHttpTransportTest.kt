@@ -30,7 +30,13 @@ class JdkHttpTransportTest {
         executor = handlers
         start()
     }
-    private val transport = JdkHttpTransport(Duration.ofSeconds(5), Duration.ofMillis(IDLE_MS))
+    private val policy = DownloadPolicy(
+        connectTimeout = Duration.ofSeconds(5),
+        idleTimeout = Duration.ofMillis(IDLE_MS),
+        allowedHosts = listOf("127.0.0.1"),
+        httpsOnly = false,
+    )
+    private val transport = JdkHttpTransport(policy)
     private val payload = ByteArray(10_000) { it.toByte() }
 
     @AfterEach
@@ -98,6 +104,65 @@ class JdkHttpTransportTest {
     }
 
     @Test
+    fun followsAllowedRedirectsKeepingTheRange() {
+        val range = AtomicReference<String?>()
+        route("/old") { exchange ->
+            exchange.responseHeaders.add("Location", "/new")
+            exchange.sendResponseHeaders(302, -1)
+        }
+        route("/new") { exchange ->
+            range.set(exchange.requestHeaders.getFirst("Range"))
+            exchange.sendResponseHeaders(200, payload.size.toLong())
+            exchange.responseBody.write(payload)
+        }
+        transport.get(uri("/old"), 10).use { response ->
+            assertEquals(200, response.status)
+            assertEquals(uri("/new"), response.finalUri)
+            assertArrayEquals(payload, response.body.readAllBytes())
+        }
+        assertEquals("bytes=10-", range.get())
+    }
+
+    @Test
+    fun redirectToADisallowedUrlIsNeverRequested() {
+        val reached = AtomicInteger()
+        route("/target") { exchange ->
+            reached.incrementAndGet()
+            exchange.sendResponseHeaders(200, -1)
+        }
+        val port = server.address.port
+        // localhost resolves to this server but is not an allowed host; user info is never allowed.
+        val locations = listOf("http://localhost:$port/target", "http://user@127.0.0.1:$port/target")
+        locations.forEachIndexed { i, location ->
+            route("/away$i") { exchange ->
+                exchange.responseHeaders.add("Location", location)
+                exchange.sendResponseHeaders(301, -1)
+            }
+            val error = assertThrows<DownloadException>(location) { transport.get(uri("/away$i"), 0).close() }
+            assertTrue(error.message!!.contains("redirect"), error.message)
+        }
+        assertEquals(0, reached.get())
+    }
+
+    @Test
+    fun redirectLoopsStopAtTheLimit() {
+        val hops = AtomicInteger()
+        route("/loop") { exchange ->
+            hops.incrementAndGet()
+            exchange.responseHeaders.add("Location", "/loop")
+            exchange.sendResponseHeaders(307, -1)
+        }
+        val error = assertThrows<DownloadException> { transport.get(uri("/loop"), 0) }
+        assertTrue(error.message!!.contains("redirects"), error.message)
+        assertEquals(policy.maxRedirects + 1, hops.get())
+    }
+
+    @Test
+    fun disallowedUrlIsRefusedBeforeConnecting() {
+        assertThrows<DownloadException> { transport.get(URI("http://localhost:${server.address.port}/x"), 0) }
+    }
+
+    @Test
     fun errorStatusIsReportedNotThrown() {
         route("/missing") { it.sendResponseHeaders(404, -1) }
         transport.get(uri("/missing"), 0).use { assertEquals(404, it.status) }
@@ -111,7 +176,6 @@ class JdkHttpTransportTest {
             exchange.sendResponseHeaders(200, payload.size.toLong())
             exchange.responseBody.write(payload)
         }
-        val policy = DownloadPolicy(allowedHosts = listOf("127.0.0.1"), httpsOnly = false)
         val spec = DownloadSpec(uri("/lib.jar"), dir.resolve("lib.jar"), Sha1.of(payload), payload.size.toLong(), payload.size.toLong())
         val downloader = Downloader(transport, policy)
         downloader.ensure(spec)

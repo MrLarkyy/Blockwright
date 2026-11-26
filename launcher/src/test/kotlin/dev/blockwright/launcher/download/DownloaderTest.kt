@@ -16,6 +16,8 @@ import java.nio.file.Files
 import java.nio.file.Path
 import java.util.concurrent.CyclicBarrier
 import java.util.concurrent.Executors
+import java.time.Duration
+import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.TimeUnit
 
 class DownloaderTest {
@@ -23,7 +25,8 @@ class DownloaderTest {
     lateinit var dir: Path
 
     private val transport = FakeTransport()
-    private val downloader = Downloader(transport)
+    private val sleeps = CopyOnWriteArrayList<Duration>()
+    private val downloader = Downloader(transport, DownloadPolicy(), sleeps::add)
     private val payload = ByteArray(200_000) { (it * 31 % 251).toByte() }
     private val url = transport.put("https://libraries.minecraft.net/test/lib/1.0/lib-1.0.jar", payload)
 
@@ -203,6 +206,50 @@ class DownloaderTest {
         transport.offline = true
         val error = assertThrows<DownloadException> { downloader.ensure(spec()) }
         assertTrue(error.message!!.contains(target.toString()), error.message)
+    }
+
+    @Test
+    fun emptyFileIsRequestedAndInstalled() {
+        val empty = transport.put("https://piston-meta.mojang.com/empty.json", ByteArray(0))
+        downloader.ensure(DownloadSpec(empty, target, Sha1.of(ByteArray(0)), 0, 0))
+        assertEquals(0L, Files.size(target))
+        assertEquals("da39a3ee5e6b4b0d3255bfef95601890afd80709", Sha1.of(target))
+        assertEquals(listOf(FakeTransport.Call(empty, 0)), transport.calls)
+        assertFalse(Files.exists(part))
+    }
+
+    @Test
+    fun retriesWaitWithGrowingBoundedDelays() {
+        transport.handler = { uri, _ -> FakeTransport.response(503, uri, ByteArray(0)) }
+        val policy = DownloadPolicy(attempts = 6, retryDelay = Duration.ofMillis(100), maxRetryDelay = Duration.ofMillis(500))
+        assertThrows<DownloadException> { Downloader(transport, policy, sleeps::add).ensure(spec()) }
+        assertEquals(listOf(100L, 200L, 400L, 500L, 500L), sleeps.map { it.toMillis() })
+        assertEquals(6, transport.calls.size)
+    }
+
+    @Test
+    fun successfulFirstAttemptNeverWaits() {
+        downloader.ensure(spec())
+        assertEquals(emptyList<Duration>(), sleeps)
+    }
+
+    @Test
+    fun fileWithoutHashIsNeverStitchedFromTwoResponses() {
+        val revision2 = ByteArray(payload.size) { 9 }
+        var first = true
+        transport.handler = { uri, rangeFrom ->
+            if (first) {
+                first = false
+                TransportResponse(200, uri, null, failingAfter(payload, 70_000))
+            } else if (rangeFrom > 0) {
+                FakeTransport.response(206, uri, revision2.copyOfRange(rangeFrom.toInt(), revision2.size), "bytes $rangeFrom-${revision2.size - 1}/${revision2.size}")
+            } else {
+                FakeTransport.response(200, uri, revision2)
+            }
+        }
+        downloader.ensure(spec(size = null, sha1 = null))
+        assertArrayEquals(revision2, Files.readAllBytes(target))
+        assertEquals(listOf(FakeTransport.Call(url, 0), FakeTransport.Call(url, 0)), transport.calls)
     }
 
     @Test

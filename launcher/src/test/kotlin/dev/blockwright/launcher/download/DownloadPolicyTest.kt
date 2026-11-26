@@ -1,10 +1,12 @@
 package dev.blockwright.launcher.download
 
+import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows
 import java.net.URI
+import java.time.Duration
 
 class DownloadPolicyTest {
     private val policy = DownloadPolicy()
@@ -48,5 +50,15 @@ class DownloadPolicyTest {
     fun rejectsNonsensicalLimits() {
         assertThrows<IllegalArgumentException> { DownloadPolicy(attempts = 0) }
         assertThrows<IllegalArgumentException> { DownloadPolicy(parallelism = 0) }
+        assertThrows<IllegalArgumentException> { DownloadPolicy(retryDelay = Duration.ofSeconds(10), maxRetryDelay = Duration.ofSeconds(1)) }
+        assertThrows<IllegalArgumentException> { DownloadPolicy(maxRedirects = -1) }
+    }
+
+    @Test
+    fun retryDelayDoublesUpToTheMaximum() {
+        val delays = (1..8).map { policy.retryDelay(it).toMillis() }
+        assertEquals(listOf(500L, 1000L, 2000L, 4000L, 8000L, 8000L, 8000L, 8000L), delays)
+        assertEquals(Duration.ofSeconds(8), policy.retryDelay(Int.MAX_VALUE))
+        assertEquals(Duration.ZERO, DownloadPolicy(retryDelay = Duration.ZERO).retryDelay(3))
     }
 }

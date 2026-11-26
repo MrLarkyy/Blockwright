@@ -13,6 +13,7 @@ import java.nio.file.StandardOpenOption.APPEND
 import java.nio.file.StandardOpenOption.CREATE
 import java.nio.file.StandardOpenOption.TRUNCATE_EXISTING
 import java.nio.file.StandardOpenOption.WRITE
+import java.time.Duration
 import java.util.concurrent.ExecutionException
 import java.util.concurrent.ExecutorCompletionService
 import java.util.concurrent.Executors
@@ -27,6 +28,7 @@ import java.util.concurrent.Semaphore
 class Downloader(
     private val transport: HttpTransport,
     val policy: DownloadPolicy = DownloadPolicy(),
+    private val sleeper: (Duration) -> Unit = { Thread.sleep(it) },
 ) {
     /** Returns [DownloadSpec.target]; a cached file that verifies is reused without any request. */
     fun ensure(spec: DownloadSpec): Path {
@@ -83,15 +85,13 @@ class Downloader(
 
     private fun download(spec: DownloadSpec): Path {
         val part = spec.target.resolveSibling("${spec.target.fileName}.part")
-        if (spec.sha1 != null) {
-            Files.deleteIfExists(spec.target)
-        } else {
-            // Without a hash a leftover part may belong to an older revision of the file: never resume it.
-            Files.deleteIfExists(part)
-        }
+        if (spec.sha1 != null) Files.deleteIfExists(spec.target)
         var failure: DownloadException? = null
-        repeat(policy.attempts) {
+        repeat(policy.attempts) { attempt ->
+            if (attempt > 0) backOff(spec, attempt)
             checkNotInterrupted(spec, null)
+            // Without a hash nothing proves two responses are the same revision: never stitch them by resuming.
+            if (spec.sha1 == null) Files.deleteIfExists(part)
             try {
                 transfer(spec, part)
                 val mismatch = mismatch(spec, part)
@@ -112,6 +112,17 @@ class Downloader(
         throw DownloadException("giving up on ${spec.uri} for ${spec.target} after ${policy.attempts} attempts: ${failure?.message}", failure)
     }
 
+    private fun backOff(spec: DownloadSpec, failedAttempts: Int) {
+        val delay = policy.retryDelay(failedAttempts)
+        if (delay.isZero) return
+        try {
+            sleeper(delay)
+        } catch (e: InterruptedException) {
+            Thread.currentThread().interrupt()
+            throw DownloadException("interrupted while waiting to retry ${spec.uri}", e)
+        }
+    }
+
     private fun checkNotInterrupted(spec: DownloadSpec, cause: Throwable?) {
         if (Thread.currentThread().isInterrupted) throw DownloadException("interrupted while downloading ${spec.uri}", cause)
     }
@@ -123,7 +134,8 @@ class Downloader(
             Files.delete(part)
             offset = 0
         }
-        if (spec.size != null && offset == spec.size) return
+        // A part already holding the expected size is only verified; a missing part (also for 0 bytes) is fetched.
+        if (spec.size != null && offset == spec.size && Files.isRegularFile(part)) return
         transport.get(spec.uri, offset).use { response ->
             checkPermitted(response.finalUri)
             val append = acceptStatus(response, offset, part)
