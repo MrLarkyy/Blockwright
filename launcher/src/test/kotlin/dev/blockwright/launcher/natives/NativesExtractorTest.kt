@@ -45,9 +45,9 @@ class NativesExtractorTest {
     }
 
     /**
-     * Makes [file] undeletable while the directory tree around it can still be renamed, as a library does that some
-     * process has loaded: no write permission on its directory (POSIX, where the directory must not be a swapped one
-     * itself: Linux refuses to rename a directory without write permission) or a read-only file (Windows).
+     * Makes [file] undeletable while its directory can still be renamed, as a library does that some process
+     * has loaded: no write permission on the directory (POSIX; the JDK refuses a plain move of such a directory,
+     * so the extractor must move atomically) or a read-only file (Windows).
      */
     private fun protect(file: Path) {
         if (posix) Files.setPosixFilePermissions(file.parent, PosixFilePermissions.fromString("r-x------")) else file.toFile().setReadOnly()
@@ -299,17 +299,17 @@ class NativesExtractorTest {
 
     @Test
     fun backupThatCannotBeDeletedDoesNotFailTheReplacement() {
-        NativesExtractor().extract(listOf(jar("old.jar", "held/old.so" to lib)), target)
+        NativesExtractor().extract(listOf(jar("old.jar", "old.so" to lib)), target)
         val fresh = jar("new.jar", "new.so" to lib)
-        protect(target.resolve("held/old.so"))
+        protect(target.resolve("old.so"))
         try {
             NativesExtractor().extract(listOf(fresh), target)
         } finally {
-            if (Files.exists(target.resolve("held/old.so"))) release(target.resolve("held/old.so"))
-            backups().forEach { release(it.resolve("held/old.so")) }
+            if (Files.exists(target.resolve("old.so"))) release(target.resolve("old.so"))
+            backups().forEach { release(it.resolve("old.so")) }
         }
         assertTrue(Files.exists(target.resolve("new.so")))
-        assertFalse(Files.exists(target.resolve("held/old.so")))
+        assertFalse(Files.exists(target.resolve("old.so")))
         assumeTrue(backups().isNotEmpty(), "this file system deletes a protected file")
 
         NativesExtractor().extract(listOf(fresh), target)
