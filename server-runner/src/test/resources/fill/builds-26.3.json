@@ -1,0 +1,31 @@
+[
+  {
+    "id": 261,
+    "time": "2026-11-18T10:00:00.000Z",
+    "channel": "STABLE",
+    "commits": [],
+    "downloads": {
+      "server:default": {
+        "name": "paper-26.3-261.jar",
+        "checksums": { "sha256": "{{sha256}}" },
+        "size": 55200000,
+        "url": "{{download}}"
+      }
+    }
+  },
+  {{build262}},
+  {
+    "id": 263,
+    "time": "2026-11-25T10:00:00.000Z",
+    "channel": "BETA",
+    "commits": [],
+    "downloads": {
+      "server:default": {
+        "name": "paper-26.3-263.jar",
+        "checksums": { "sha256": "{{sha256}}" },
+        "size": 55400000,
+        "url": "{{download}}"
+      }
+    }
+  }
+]

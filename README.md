@@ -25,3 +25,6 @@ Performance budgets and the benchmark harness: [docs/benchmark.md](docs/benchmar
 Downloaded client files go to `%LOCALAPPDATA%\blockwright\cache` (Windows), `~/Library/Caches/blockwright` (macOS)
 or `$XDG_CACHE_HOME/blockwright`, else `~/.cache/blockwright` (Linux); never into the repository.
 `./gradlew build` makes no network request; `./gradlew :launcher:integrationTest` (opt-in) downloads a real version from Mojang.
+
+Paper test servers: see [docs/server-runner.md](docs/server-runner.md); their real-server test runs with
+`./gradlew :server-runner:integrationTest -Pblockwright.acceptEula=true` (you accept the Minecraft EULA for that run).

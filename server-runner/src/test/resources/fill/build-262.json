@@ -1,0 +1,14 @@
+{
+  "id": 262,
+  "time": "2026-11-20T10:00:00.000Z",
+  "channel": "STABLE",
+  "commits": [{ "sha": "0000000000000000000000000000000000000000", "time": "2026-11-20T09:00:00.000Z", "message": "Synthetic fixture commit" }],
+  "downloads": {
+    "server:default": {
+      "name": "paper-26.3-262.jar",
+      "checksums": { "sha256": "{{sha256}}" },
+      "size": 55300000,
+      "url": "{{download}}"
+    }
+  }
+}
