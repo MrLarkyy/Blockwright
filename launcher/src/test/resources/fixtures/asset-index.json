@@ -1,0 +1,7 @@
+{
+  "objects": {
+    "minecraft/lang/test_lang.json": {"hash": "{{sha1:assetA}}", "size": {{size:assetA}}},
+    "minecraft/sounds/test/sound.ogg": {"hash": "{{sha1:assetB}}", "size": {{size:assetB}}},
+    "minecraft/lang/same_content.json": {"hash": "{{sha1:assetA}}", "size": {{size:assetA}}}
+  }
+}
