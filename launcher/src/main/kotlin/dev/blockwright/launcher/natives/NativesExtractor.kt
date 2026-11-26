@@ -140,10 +140,11 @@ class NativesExtractor(private val limits: ExtractionLimits = ExtractionLimits()
         }
     }
 
-    private companion object {
-        const val STAGING = ".tmp-"
-        const val BACKUP = ".old-"
-        const val BUFFER = 64 * 1024
-        const val MAX_SHOWN = 120
+    companion object {
+        /** Follow the directory name in the names of its staging and backup siblings. */
+        internal const val STAGING = ".tmp-"
+        internal const val BACKUP = ".old-"
+        private const val BUFFER = 64 * 1024
+        private const val MAX_SHOWN = 120
     }
 }

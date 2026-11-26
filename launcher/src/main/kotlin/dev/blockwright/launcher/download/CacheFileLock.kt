@@ -20,6 +20,9 @@ object CacheFileLock {
 
     private val entries = HashMap<Path, Entry>()
 
+    /** Appended to the name of a cache entry to name its lock file. */
+    internal const val SUFFIX = ".lock"
+
     fun <T> withLock(target: Path, block: () -> T): T {
         val key = target.toAbsolutePath().normalize()
         val entry = synchronized(entries) { entries.getOrPut(key) { Entry() }.also { it.users++ } }
@@ -27,7 +30,7 @@ object CacheFileLock {
             entry.lock.lockInterruptibly()
             try {
                 Files.createDirectories(key.parent)
-                val lockFile = key.resolveSibling("${key.fileName}.lock")
+                val lockFile = key.resolveSibling("${key.fileName}$SUFFIX")
                 FileChannel.open(lockFile, CREATE, WRITE).use { channel ->
                     channel.lock().use { return block() }
                 }

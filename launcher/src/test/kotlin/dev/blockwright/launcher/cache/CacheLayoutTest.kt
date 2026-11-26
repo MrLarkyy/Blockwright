@@ -38,6 +38,22 @@ class CacheLayoutTest {
         assertThrows<DownloadException> { layout.assetIndex(id) }
     }
 
+    @ParameterizedTest
+    @ValueSource(strings = ["1.8.lock", "1.8.LOCK", "1.8.9.tmp-0b0e5a3c", "1.8.tmp-", "1.8.Tmp-x.1", "1.8.9.old-crashed", "a.OLD-1"])
+    fun rejectsVersionIdsNamedLikeALockOrANativesStagingOrBackupDirectory(id: String) {
+        assertThrows<DownloadException> { layout.nativesDir(id) }
+        assertThrows<DownloadException> { layout.versionJson(id) }
+        assertThrows<DownloadException> { layout.clientJar(id) }
+        assertThrows<DownloadException> { layout.assetIndex(id) }
+    }
+
+    @Test
+    fun acceptsVersionIdsThatOnlyResembleThoseNames() {
+        for (id in listOf("lock", "1.8-lock", "1.8.locked", "1.8.tmp", "tmp-1", "1.8.old", "old-1", "1.8.0ld-1")) {
+            assertEquals(root.resolve("natives/$id").normalize(), layout.nativesDir(id))
+        }
+    }
+
     @Test
     fun acceptsRealVersionIds() {
         for (id in listOf("1.21.4", "26.3", "26.4-pre-1", "26.4-snapshot-2", "1.7.10", "b1.7.3", "rd-132211")) {

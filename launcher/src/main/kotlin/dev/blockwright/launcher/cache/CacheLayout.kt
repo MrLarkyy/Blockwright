@@ -1,11 +1,14 @@
 package dev.blockwright.launcher.cache
 
+import dev.blockwright.launcher.download.CacheFileLock
 import dev.blockwright.launcher.download.DownloadException
+import dev.blockwright.launcher.natives.NativesExtractor
 import java.nio.file.Path
 
 /**
  * The shared download cache, laid out like the vanilla launcher's game directory. Every name that comes from a
- * manifest is validated so no resolved path can leave [root].
+ * manifest is validated so no resolved path can leave [root] and no version can take the name of a lock file or
+ * of the staging or backup directory the cache keeps next to another version.
  */
 class CacheLayout(root: Path) {
     val root: Path = root.toAbsolutePath().normalize()
@@ -34,9 +37,18 @@ class CacheLayout(root: Path) {
     private fun versionDir(id: String): Path = root.resolve("versions").resolve(checkId(id))
 
     private fun checkId(id: String): String {
-        if (!ID.matches(id)) throw DownloadException("invalid version id: ${printable(id)}")
+        if (!ID.matches(id) || isBookkeepingName(id)) throw DownloadException("invalid version id: ${printable(id)}")
         return id
     }
+
+    /**
+     * Entries named by a version id share a directory with `<id>.lock` files and, for natives, `<id>.tmp-*` and
+     * `<id>.old-*` directories that are removed as crash leftovers. Compared without case: file systems may fold it.
+     */
+    private fun isBookkeepingName(id: String): Boolean =
+        id.endsWith(CacheFileLock.SUFFIX, ignoreCase = true) ||
+            id.contains(NativesExtractor.STAGING, ignoreCase = true) ||
+            id.contains(NativesExtractor.BACKUP, ignoreCase = true)
 
     private fun safeRelativePath(path: String): String {
         val segments = path.split('/')
