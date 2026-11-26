@@ -29,9 +29,9 @@ class NativesExtractorTest {
     }
 
     /** Only the target (and its lock file) may remain: no staging or backup directory. */
-    private fun assertNoLeftovers() {
+    private fun assertNoLeftovers(allow: Set<String> = emptySet()) {
         val names = if (Files.exists(nativesRoot)) Files.list(nativesRoot).use { s -> s.map { it.fileName.toString() }.toList() } else emptyList()
-        assertTrue(names.all { it == "1.8.9" || it == "1.8.9.lock" }, names.toString())
+        assertTrue(names.all { it == "1.8.9" || it == "1.8.9.lock" || it in allow }, names.toString())
     }
 
     @Test
@@ -88,13 +88,73 @@ class NativesExtractorTest {
     }
 
     @Test
-    fun rerunWithTheSameJarsSkipsExtraction() {
-        val jar = jar("lwjgl-natives.jar", "liblwjgl.so" to lib)
+    fun rerunWithIntactFilesSkipsExtraction() {
+        val jar = jar("lwjgl-natives.jar", "liblwjgl.so" to lib, "sub/libopenal.so" to lib)
         NativesExtractor().extract(listOf(jar), target)
-        Files.writeString(target.resolve("liblwjgl.so"), "touched")
         Files.delete(jar.path)
         NativesExtractor().extract(listOf(jar), target)
-        assertEquals("touched", Files.readString(target.resolve("liblwjgl.so")))
+        assertArrayEquals(lib, Files.readAllBytes(target.resolve("liblwjgl.so")))
+    }
+
+    @Test
+    fun changedExtractedFileIsExtractedAgain() {
+        val jar = jar("lwjgl-natives.jar", "liblwjgl.so" to lib)
+        NativesExtractor().extract(listOf(jar), target)
+        Files.write(target.resolve("liblwjgl.so"), lib.copyOf().also { it[0] = 'X'.code.toByte() })
+        NativesExtractor().extract(listOf(jar), target)
+        assertArrayEquals(lib, Files.readAllBytes(target.resolve("liblwjgl.so")))
+        assertNoLeftovers()
+    }
+
+    @Test
+    fun missingExtractedFileIsExtractedAgain() {
+        val jar = jar("lwjgl-natives.jar", "liblwjgl.so" to lib, "sub/libopenal.so" to lib)
+        NativesExtractor().extract(listOf(jar), target)
+        Files.delete(target.resolve("sub/libopenal.so"))
+        NativesExtractor().extract(listOf(jar), target)
+        assertArrayEquals(lib, Files.readAllBytes(target.resolve("sub/libopenal.so")))
+    }
+
+    @Test
+    fun unrecordedFileInTheDirectoryTriggersExtraction() {
+        val jar = jar("lwjgl-natives.jar", "liblwjgl.so" to lib)
+        NativesExtractor().extract(listOf(jar), target)
+        Files.writeString(target.resolve("planted.so"), "not from the jar")
+        NativesExtractor().extract(listOf(jar), target)
+        assertFalse(Files.exists(target.resolve("planted.so")))
+        assertArrayEquals(lib, Files.readAllBytes(target.resolve("liblwjgl.so")))
+    }
+
+    @Test
+    fun tamperedMarkerTriggersExtraction() {
+        val jar = jar("lwjgl-natives.jar", "liblwjgl.so" to lib)
+        NativesExtractor().extract(listOf(jar), target)
+        Files.write(target.resolve("liblwjgl.so"), "evil".toByteArray())
+        val marker = target.resolve(".extracted")
+        Files.writeString(marker, Files.readString(marker).replace(Sha1.of(lib), Sha1.of("evil".toByteArray())))
+        NativesExtractor().extract(listOf(jar), target)
+        assertArrayEquals(lib, Files.readAllBytes(target.resolve("liblwjgl.so")))
+    }
+
+    @Test
+    fun entryNamedLikeTheMarkerIsRejected() {
+        assertThrows<DownloadException> { NativesExtractor().extract(listOf(jar("m.jar", ".extracted" to lib)), target) }
+        assertFalse(Files.exists(target))
+    }
+
+    @Test
+    fun leftoversOfACrashedRunAreRemoved() {
+        val jar = jar("lwjgl-natives.jar", "liblwjgl.so" to lib)
+        NativesExtractor().extract(listOf(jar), target)
+        val staging = Files.createDirectories(nativesRoot.resolve("1.8.9.tmp-crashed/sub"))
+        Files.writeString(staging.resolve("half.so"), "partial")
+        Files.createDirectories(nativesRoot.resolve("1.8.9.old-crashed"))
+        val otherVersion = Files.createDirectories(nativesRoot.resolve("1.8.8.tmp-other"))
+
+        NativesExtractor().extract(listOf(jar), target)
+
+        assertNoLeftovers(allow = setOf(otherVersion.fileName.toString()))
+        assertArrayEquals(lib, Files.readAllBytes(target.resolve("liblwjgl.so")))
     }
 
     @Test

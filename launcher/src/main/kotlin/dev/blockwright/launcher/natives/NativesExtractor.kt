@@ -16,37 +16,46 @@ import kotlin.io.path.deleteRecursively
 
 /**
  * Extracts legacy natives jars into one directory. Work happens in a sibling staging directory that replaces the
- * target only when complete, so a failure leaves no partial directory. A marker naming the source jar hashes
- * lets a rerun skip extraction without touching the jars.
+ * target only when complete, so a failure leaves no partial directory. A marker records the source jars and every
+ * extracted file; a rerun skips extraction only when all recorded files are present and unchanged, and removes
+ * staging or backup directories a crashed run left behind.
  */
 class NativesExtractor(private val limits: ExtractionLimits = ExtractionLimits()) {
     /** Returns [target], which always exists afterwards (empty when there is nothing to extract). */
     fun extract(jars: List<NativeJar>, target: Path): Path {
-        val marker = marker(jars)
-        if (isCurrent(target, marker)) return target
+        val marker = NativesMarker(jars)
+        if (marker.matches(target) && leftovers(target).isEmpty()) return target
         return CacheFileLock.withLock(target) {
-            if (!isCurrent(target, marker)) replace(jars, target, marker)
+            removeLeftovers(target)
+            if (!marker.matches(target)) replace(jars, target, marker)
             target
         }
     }
 
-    private fun marker(jars: List<NativeJar>): String =
-        (listOf(MARKER_HEADER) + jars.map { it.sha1.lowercase() }.sorted()).joinToString("\n")
-
-    private fun isCurrent(target: Path, marker: String): Boolean {
-        val file = target.resolve(MARKER)
-        return Files.isRegularFile(file) && Files.readString(file) == marker
+    /** Staging and backup directories of [target]; they exist only while the lock is held or after a crash. */
+    private fun leftovers(target: Path): List<Path> {
+        val parent = target.parent
+        if (!Files.isDirectory(parent)) return emptyList()
+        val prefixes = listOf("${target.fileName}$STAGING", "${target.fileName}$BACKUP")
+        return Files.list(parent).use { entries ->
+            entries.filter { entry -> prefixes.any { entry.fileName.toString().startsWith(it) } }.toList()
+        }
     }
 
     @OptIn(ExperimentalPathApi::class)
-    private fun replace(jars: List<NativeJar>, target: Path, marker: String) {
+    private fun removeLeftovers(target: Path) {
+        leftovers(target).forEach { it.deleteRecursively() }
+    }
+
+    @OptIn(ExperimentalPathApi::class)
+    private fun replace(jars: List<NativeJar>, target: Path, marker: NativesMarker) {
         Files.createDirectories(target.parent)
-        val staging = target.resolveSibling("${target.fileName}.tmp-${UUID.randomUUID()}")
+        val staging = target.resolveSibling("${target.fileName}$STAGING${UUID.randomUUID()}")
         try {
             Files.createDirectory(staging)
             val budget = Budget()
             jars.forEach { unpack(it, staging, budget) }
-            Files.writeString(staging.resolve(MARKER), marker)
+            marker.write(staging)
             swap(staging, target)
         } finally {
             staging.deleteRecursively()
@@ -55,7 +64,7 @@ class NativesExtractor(private val limits: ExtractionLimits = ExtractionLimits()
 
     @OptIn(ExperimentalPathApi::class)
     private fun swap(staging: Path, target: Path) {
-        val old = target.resolveSibling("${target.fileName}.old-${UUID.randomUUID()}")
+        val old = target.resolveSibling("${target.fileName}$BACKUP${UUID.randomUUID()}")
         val hadOld = Files.exists(target)
         if (hadOld) Files.move(target, old)
         try {
@@ -93,7 +102,8 @@ class NativesExtractor(private val limits: ExtractionLimits = ExtractionLimits()
         val unsafe = trimmed.isEmpty() ||
             trimmed.startsWith("/") ||
             trimmed.any { it == '\\' || it == ':' || it.isISOControl() } ||
-            trimmed.split('/').any { it.isEmpty() || it == "." || it == ".." }
+            trimmed.split('/').any { it.isEmpty() || it == "." || it == ".." } ||
+            trimmed == NativesMarker.FILE_NAME
         val resolved = staging.resolve(trimmed).normalize()
         if (unsafe || !resolved.startsWith(staging) || resolved == staging) {
             throw DownloadException("unsafe entry name in ${jar.path}: ${trimmed.take(MAX_SHOWN)}")
@@ -134,8 +144,8 @@ class NativesExtractor(private val limits: ExtractionLimits = ExtractionLimits()
     }
 
     private companion object {
-        const val MARKER = ".extracted"
-        const val MARKER_HEADER = "blockwright-natives v1"
+        const val STAGING = ".tmp-"
+        const val BACKUP = ".old-"
         const val BUFFER = 64 * 1024
         const val MAX_SHOWN = 120
     }
