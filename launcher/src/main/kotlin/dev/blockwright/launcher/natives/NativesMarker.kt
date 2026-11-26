@@ -3,54 +3,59 @@ package dev.blockwright.launcher.natives
 import dev.blockwright.launcher.download.Sha1
 import java.io.IOException
 import java.nio.file.Files
+import java.nio.file.InvalidPathException
 import java.nio.file.LinkOption.NOFOLLOW_LINKS
 import java.nio.file.Path
 import kotlin.io.path.relativeTo
 
 /**
  * The `.extracted` marker of a natives directory: the source jar hashes plus size and SHA-1 of every extracted
- * file. A directory is current only when its jars match and its files are exactly the recorded ones, unchanged.
+ * file. A directory is current when its jars match and every recorded file is present and unchanged.
+ *
+ * Files the marker does not record are ignored and the directory is never listed: the game writes its own
+ * libraries into the natives directory at runtime, so their presence says nothing about the extracted ones.
  */
 internal class NativesMarker(jars: List<NativeJar>) {
     private val jarLines = jars.map { "jar ${it.sha1.lowercase()}" }.distinct().sorted()
 
-    /** Records every file of [dir] (extracted, before the marker exists) and writes the marker into it. */
+    /** Records every file of the freshly extracted [dir] and writes the marker into it. */
     fun write(dir: Path) {
-        val fileLines = files(dir)?.map { (name, path) -> "file ${Sha1.of(path)} ${Files.size(path)} $name" }
-            ?: throw IOException("unexpected non-regular file in $dir")
+        val fileLines = Files.walk(dir).use { paths ->
+            paths.filter { Files.isRegularFile(it, NOFOLLOW_LINKS) }
+                .map { "file ${Sha1.of(it)} ${Files.size(it)} ${it.relativeTo(dir).joinToString("/")}" }
+                .toList()
+        }
         Files.writeString(dir.resolve(FILE_NAME), (listOf(HEADER) + jarLines + fileLines.sorted()).joinToString("\n"))
     }
 
-    fun matches(dir: Path): Boolean {
+    /** An unreadable marker or recorded file means a damaged directory, to extract again rather than fail on. */
+    fun matches(dir: Path): Boolean = try {
+        recordedFilesUnchanged(dir.normalize())
+    } catch (_: IOException) {
+        false
+    }
+
+    private fun recordedFilesUnchanged(dir: Path): Boolean {
         val markerFile = dir.resolve(FILE_NAME)
         if (!Files.isRegularFile(markerFile, NOFOLLOW_LINKS)) return false
         val lines = Files.readAllLines(markerFile)
         if (lines.firstOrNull() != HEADER) return false
-        val recordedJars = lines.filter { it.startsWith("jar ") }
-        if (recordedJars != jarLines) return false
-        val recorded = lines.filter { it.startsWith("file ") }.map { it.split(' ', limit = 4) }
-        if (recorded.any { it.size != 4 }) return false
-        val actual = files(dir)?.toMap() ?: return false
-        if (actual.keys != recorded.map { it[3] }.toSet() || actual.size != recorded.size) return false
-        return recorded.all { (_, sha1, size, name) ->
-            val path = actual.getValue(name)
-            Files.size(path).toString() == size && Sha1.of(path) == sha1
+        if (lines.filter { it.startsWith("jar ") } != jarLines) return false
+        return lines.filter { it.startsWith("file ") }.all { line ->
+            val fields = line.split(' ', limit = 4)
+            fields.size == 4 && unchanged(dir, name = fields[3], size = fields[2], sha1 = fields[1])
         }
     }
 
-    /** Relative name (with `/`) to path of every file except the marker; null when anything is not a plain file. */
-    private fun files(dir: Path): List<Pair<String, Path>>? {
-        val entries = Files.walk(dir).use { stream -> stream.filter { it != dir }.toList() }
-        val result = ArrayList<Pair<String, Path>>()
-        for (entry in entries) {
-            when {
-                Files.isDirectory(entry, NOFOLLOW_LINKS) -> continue
-                !Files.isRegularFile(entry, NOFOLLOW_LINKS) -> return null
-                entry == dir.resolve(FILE_NAME) -> continue
-                else -> result += entry.relativeTo(dir).joinToString("/") to entry
-            }
+    private fun unchanged(dir: Path, name: String, size: String, sha1: String): Boolean {
+        val file = try {
+            dir.resolve(name).normalize()
+        } catch (_: InvalidPathException) {
+            return false
         }
-        return result
+        // The marker vouches only for files inside its own directory.
+        if (file == dir || !file.startsWith(dir)) return false
+        return Files.isRegularFile(file, NOFOLLOW_LINKS) && Files.size(file).toString() == size && Sha1.of(file) == sha1
     }
 
     companion object {

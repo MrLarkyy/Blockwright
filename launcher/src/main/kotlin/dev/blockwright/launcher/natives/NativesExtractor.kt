@@ -17,34 +17,31 @@ import kotlin.io.path.deleteRecursively
 /**
  * Extracts legacy natives jars into one directory. Work happens in a sibling staging directory that replaces the
  * target only when complete, so a failure leaves no partial directory. A marker records the source jars and every
- * extracted file; a rerun skips extraction only when all recorded files are present and unchanged, and removes
- * staging or backup directories a crashed run left behind.
+ * extracted file; a rerun skips extraction when all recorded files are present and unchanged.
+ *
+ * The game writes its own libraries into the same directory at runtime and keeps them open while it runs. Files
+ * the marker does not record are therefore left alone and a valid directory is never replaced: on Windows the
+ * replacement fails while a client of that version runs, which must not stop another client from resolving.
+ *
+ * Check and replacement run under one lock, so no reader holds a file open while the directory is swapped and a
+ * staging or backup directory found there can only be the leftover of a crashed run.
  */
 class NativesExtractor(private val limits: ExtractionLimits = ExtractionLimits()) {
     /** Returns [target], which always exists afterwards (empty when there is nothing to extract). */
-    fun extract(jars: List<NativeJar>, target: Path): Path {
+    fun extract(jars: List<NativeJar>, target: Path): Path = CacheFileLock.withLock(target) {
         val marker = NativesMarker(jars)
-        if (marker.matches(target) && leftovers(target).isEmpty()) return target
-        return CacheFileLock.withLock(target) {
-            removeLeftovers(target)
-            if (!marker.matches(target)) replace(jars, target, marker)
-            target
-        }
-    }
-
-    /** Staging and backup directories of [target]; they exist only while the lock is held or after a crash. */
-    private fun leftovers(target: Path): List<Path> {
-        val parent = target.parent
-        if (!Files.isDirectory(parent)) return emptyList()
-        val prefixes = listOf("${target.fileName}$STAGING", "${target.fileName}$BACKUP")
-        return Files.list(parent).use { entries ->
-            entries.filter { entry -> prefixes.any { entry.fileName.toString().startsWith(it) } }.toList()
-        }
+        removeLeftovers(target)
+        if (!marker.matches(target)) replace(jars, target, marker)
+        target
     }
 
     @OptIn(ExperimentalPathApi::class)
     private fun removeLeftovers(target: Path) {
-        leftovers(target).forEach { it.deleteRecursively() }
+        val prefixes = listOf("${target.fileName}$STAGING", "${target.fileName}$BACKUP")
+        val leftovers = Files.list(target.parent).use { entries ->
+            entries.filter { entry -> prefixes.any { entry.fileName.toString().startsWith(it) } }.toList()
+        }
+        leftovers.forEach { it.deleteRecursively() }
     }
 
     @OptIn(ExperimentalPathApi::class)

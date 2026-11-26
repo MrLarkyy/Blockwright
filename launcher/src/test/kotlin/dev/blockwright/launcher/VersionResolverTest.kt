@@ -76,6 +76,25 @@ class VersionResolverTest {
     }
 
     @Test
+    fun secondResolveKeepsWhatTheGameWroteIntoTheNativesDirectory() {
+        val first = resolve()
+        val unpacked = first.nativesDir.resolve("lwjgl/3.3.3/x64/liblwjgl.so")
+        Files.createDirectories(unpacked.parent)
+        Files.writeString(unpacked, "unpacked by the game")
+        val marker = first.nativesDir.resolve(".extracted")
+        val extractedAt = Files.getLastModifiedTime(marker)
+        transport.calls.clear()
+        transport.offline = true
+
+        val second = resolve()
+
+        assertEquals(emptyList<FakeTransport.Call>(), transport.calls)
+        assertEquals(first, second)
+        assertEquals("unpacked by the game", Files.readString(unpacked))
+        assertEquals(extractedAt, Files.getLastModifiedTime(marker))
+    }
+
+    @Test
     fun corruptLibraryIsDetectedAndDownloadedAgain() {
         resolve()
         val core = library("test/core/1.0/core-1.0.jar")

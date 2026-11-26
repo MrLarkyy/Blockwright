@@ -12,8 +12,13 @@ import org.junit.jupiter.api.assertThrows
 import org.junit.jupiter.api.io.TempDir
 import org.junit.jupiter.params.ParameterizedTest
 import org.junit.jupiter.params.provider.ValueSource
+import java.nio.channels.FileChannel
 import java.nio.file.Files
 import java.nio.file.Path
+import java.nio.file.StandardOpenOption
+import java.util.concurrent.CyclicBarrier
+import java.util.concurrent.Executors
+import java.util.concurrent.TimeUnit
 
 class NativesExtractorTest {
     @TempDir
@@ -26,6 +31,13 @@ class NativesExtractorTest {
     private fun jar(name: String, vararg entries: Pair<String, ByteArray>): NativeJar {
         val path = TestZips.write(dir.resolve("libs/$name"), *entries)
         return NativeJar(path, Sha1.of(path), listOf("META-INF/"))
+    }
+
+    /** A library the game unpacks into the natives directory at runtime; the marker does not record it. */
+    private fun gameWrites(name: String): Path {
+        val file = target.resolve(name)
+        Files.createDirectories(file.parent)
+        return Files.write(file, RUNTIME_LIBRARY)
     }
 
     /** Only the target (and its lock file) may remain: no staging or backup directory. */
@@ -116,13 +128,100 @@ class NativesExtractorTest {
     }
 
     @Test
-    fun unrecordedFileInTheDirectoryTriggersExtraction() {
+    fun filesTheGameAddsKeepTheDirectoryValid() {
         val jar = jar("lwjgl-natives.jar", "liblwjgl.so" to lib)
         NativesExtractor().extract(listOf(jar), target)
-        Files.writeString(target.resolve("planted.so"), "not from the jar")
+        val runtime = gameWrites("lwjgl/3.3.3/x64/lwjgl.dll")
+        val loose = gameWrites("jna-1234.dll")
+        // Without the jar a second extraction would fail, so passing proves the directory was reused.
+        Files.delete(jar.path)
+
         NativesExtractor().extract(listOf(jar), target)
-        assertFalse(Files.exists(target.resolve("planted.so")))
+
+        assertArrayEquals(RUNTIME_LIBRARY, Files.readAllBytes(runtime))
+        assertArrayEquals(RUNTIME_LIBRARY, Files.readAllBytes(loose))
         assertArrayEquals(lib, Files.readAllBytes(target.resolve("liblwjgl.so")))
+        assertNoLeftovers()
+    }
+
+    @Test
+    fun directoryInUseByARunningClientStaysInPlace() {
+        NativesExtractor().extract(emptyList(), target)
+        val loaded = gameWrites("netty/libnetty_transport.dll")
+
+        // An open file stands for a loaded library: on Windows it makes replacing the directory fail.
+        FileChannel.open(loaded, StandardOpenOption.READ).use {
+            NativesExtractor().extract(emptyList(), target)
+        }
+
+        assertArrayEquals(RUNTIME_LIBRARY, Files.readAllBytes(loaded))
+        assertNoLeftovers()
+    }
+
+    @Test
+    fun changedExtractedFileIsExtractedAgainDespiteFilesTheGameAdded() {
+        val jar = jar("lwjgl-natives.jar", "liblwjgl.so" to lib)
+        NativesExtractor().extract(listOf(jar), target)
+        val runtime = gameWrites("lwjgl/3.3.3/x64/lwjgl.dll")
+        Files.writeString(target.resolve("liblwjgl.so"), "damaged")
+
+        NativesExtractor().extract(listOf(jar), target)
+
+        assertArrayEquals(lib, Files.readAllBytes(target.resolve("liblwjgl.so")))
+        assertFalse(Files.exists(runtime))
+        assertNoLeftovers()
+    }
+
+    @Test
+    fun markerEntryOutsideTheDirectoryTriggersExtraction() {
+        val jar = jar("lwjgl-natives.jar", "liblwjgl.so" to lib)
+        NativesExtractor().extract(listOf(jar), target)
+        Files.write(nativesRoot.resolve("outside.so"), lib)
+        val marker = target.resolve(".extracted")
+        Files.writeString(marker, Files.readString(marker) + "\nfile ${Sha1.of(lib)} ${lib.size} ../outside.so")
+
+        NativesExtractor().extract(listOf(jar), target)
+
+        assertFalse(Files.readString(marker).contains("outside.so"))
+        assertArrayEquals(lib, Files.readAllBytes(target.resolve("liblwjgl.so")))
+    }
+
+    @Test
+    fun unreadableMarkerTriggersExtraction() {
+        val jar = jar("lwjgl-natives.jar", "liblwjgl.so" to lib)
+        NativesExtractor().extract(listOf(jar), target)
+        val marker = target.resolve(".extracted")
+        val written = Files.readString(marker)
+        Files.write(marker, byteArrayOf(0xC3.toByte(), 0x28, 0xFF.toByte(), 0xFE.toByte()))
+
+        NativesExtractor().extract(listOf(jar), target)
+
+        assertEquals(written, Files.readString(marker))
+        assertNoLeftovers()
+    }
+
+    @Test
+    fun concurrentExtractionsOfADamagedDirectoryAllSucceed() {
+        val jar = jar("lwjgl-natives.jar", "liblwjgl.so" to ByteArray(256 * 1024) { it.toByte() }, "sub/libopenal.so" to lib)
+        NativesExtractor().extract(listOf(jar), target)
+        Files.delete(target.resolve("sub/libopenal.so"))
+        val threads = 6
+        val barrier = CyclicBarrier(threads)
+        val pool = Executors.newFixedThreadPool(threads)
+
+        try {
+            (1..threads).map {
+                pool.submit<Path> {
+                    barrier.await()
+                    NativesExtractor().extract(listOf(jar), target)
+                }
+            }.forEach { it.get(60, TimeUnit.SECONDS) }
+        } finally {
+            pool.shutdownNow()
+        }
+
+        assertArrayEquals(lib, Files.readAllBytes(target.resolve("sub/libopenal.so")))
+        assertNoLeftovers()
     }
 
     @Test
@@ -172,5 +271,9 @@ class NativesExtractorTest {
         assertThrows<DownloadException> { NativesExtractor().extract(listOf(jar("bad.jar", "../evil.so" to lib)), target) }
         assertTrue(Files.exists(target.resolve("good.so")))
         assertNoLeftovers()
+    }
+
+    private companion object {
+        val RUNTIME_LIBRARY = "unpacked by the game".toByteArray()
     }
 }
