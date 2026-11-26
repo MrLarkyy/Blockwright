@@ -9,6 +9,7 @@ profile, measures them and compares the numbers with the versioned budgets in `p
 ./gradlew :orchestrator:bench                         # local, report only
 ./gradlew :orchestrator:bench -Pbench.strict=true     # CI mode
 ./gradlew :orchestrator:bench -Pbench.profile=stub    # one profile
+./gradlew :orchestrator:bench -Pbench.budgets=/path/to/budgets.json   # other budgets file
 ```
 
 Output: `orchestrator/build/reports/bench/bench-report.json` (machine readable) and `bench-summary.md`. Both are
@@ -18,6 +19,9 @@ folder as the `bench-report` artefact.
 Exit codes: `0` pass, `1` a budget is exceeded (or a required profile has no target, or a metric failed), `2`
 configuration or usage error (unknown metric key, non-positive budget, bad `schemaVersion`, a warm budget without a
 warm sample). A breach prints `FAIL profile=P metric=M value=V budget=B unit=U`.
+A metric that could not run but is budgeted under `--strict` prints `value=NOT_RUN`. Gradle wraps the exit code: any
+non-zero harness exit shows as Gradle exit 1; run `dev.blockwright.orchestrator.bench.BenchMain` directly for the exact
+0/1/2 codes.
 
 ## Metrics
 

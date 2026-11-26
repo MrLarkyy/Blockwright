@@ -43,6 +43,12 @@ class BudgetGateTest {
     }
 
     @Test
+    fun strictNotRunFailureHasTheFullShape() {
+        val verdict = pss(BudgetGate(true), result(mapOf(Metric.Pss to Measurement.NotRun("no proc"))))
+        assertTrue(verdict.message().startsWith("FAIL profile=p metric=pssMiB value=NOT_RUN budget=100.00 unit=MiB"))
+    }
+
+    @Test
     fun failedMeasurementFails() {
         val verdict = pss(BudgetGate(false), result(mapOf(Metric.Pss to Measurement.Failed("boom"))))
         assertEquals(VerdictStatus.FAIL, verdict.status)

@@ -12,13 +12,14 @@ tasks.register<JavaExec>("bench") {
     val sourceSets = project.extensions.getByType<SourceSetContainer>()
     classpath = sourceSets["main"].runtimeClasspath + sourceSets["testFixtures"].runtimeClasspath
     mainClass.set(benchMain)
-    val budgets = rootProject.layout.projectDirectory.file("perf/budgets.json")
+    val budgets = providers.gradleProperty("bench.budgets")
+        .orElse(rootProject.layout.projectDirectory.file("perf/budgets.json").asFile.absolutePath)
     val reportDir = layout.buildDirectory.dir("reports/bench")
     val strict = providers.gradleProperty("bench.strict").map { it.toBoolean() }.orElse(false)
     val profile = providers.gradleProperty("bench.profile")
     argumentProviders.add(CommandLineArgumentProvider {
         buildList {
-            addAll(listOf("--budgets", budgets.asFile.absolutePath, "--report-dir", reportDir.get().asFile.absolutePath))
+            addAll(listOf("--budgets", budgets.get(), "--report-dir", reportDir.get().asFile.absolutePath))
             if (strict.get()) add("--strict")
             profile.orNull?.let { addAll(listOf("--profile", it)) }
         }
