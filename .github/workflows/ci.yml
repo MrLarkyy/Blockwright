@@ -41,6 +41,34 @@ jobs:
             **/build/reports/tests
             **/build/test-results
 
+  bench:
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: '25'
+      - uses: gradle/actions/setup-gradle@v6
+        with:
+          cache-read-only: ${{ github.ref != 'refs/heads/main' }}
+      - run: ./gradlew :orchestrator:bench -Pbench.strict=true --console=plain --no-daemon
+      - name: Publish bench summary
+        if: always()
+        run: |
+          if [ -f orchestrator/build/reports/bench/bench-summary.md ]; then
+            cat orchestrator/build/reports/bench/bench-summary.md >> "$GITHUB_STEP_SUMMARY"
+          fi
+      - name: Upload bench report
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: bench-report
+          path: orchestrator/build/reports/bench
+          if-no-files-found: error
+
   # Starts a real Paper server, which needs the Minecraft EULA: only on a manual run whose dispatcher ticked
   # accept_eula. Push and pull request runs never accept it.
   server-integration:

@@ -20,6 +20,8 @@ Gradle runs on JDK 17 or newer; the JDK 25 toolchain is found locally or downloa
 ./gradlew build
 ```
 
+Performance budgets and the benchmark harness: [docs/benchmark.md](docs/benchmark.md).
+
 Downloaded client files go to `%LOCALAPPDATA%\blockwright\cache` (Windows), `~/Library/Caches/blockwright` (macOS)
 or `$XDG_CACHE_HOME/blockwright`, else `~/.cache/blockwright` (Linux); never into the repository.
 `./gradlew build` makes no network request; `./gradlew :launcher:integrationTest` (opt-in) downloads a real version from Mojang.
