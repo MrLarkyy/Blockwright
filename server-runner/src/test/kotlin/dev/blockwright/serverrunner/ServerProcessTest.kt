@@ -145,6 +145,36 @@ class ServerProcessTest {
     }
 
     @Test
+    fun shutdownHookPathKillsTheTreeKeepsTheLogAndRemovesTheRunDir() {
+        val server = start("spawn-child")
+        val childPid = Files.readAllLines(server.consoleLog).first { it.startsWith("child ") }.removePrefix("child ").trim().toLong()
+
+        server.onShutdown()
+
+        assertFalse(FakeServers.isAlive(server.pid))
+        assertFalse(FakeServers.isAlive(childPid))
+        assertFalse(Files.exists(runDir()))
+        assertTrue(Files.readString(artefacts().resolve("latest.log")).contains("Done ("))
+        assertTrue(server.stop().latestLog != null)
+    }
+
+    @Test
+    fun interruptedStopStillCleansUpAndKeepsTheInterrupt() {
+        val server = start("ignore-stop", stopTimeout = 30.seconds)
+        val begin = System.nanoTime()
+
+        Thread.currentThread().interrupt()
+        val result = server.stop()
+
+        assertTrue(Thread.interrupted())
+        assertTrue(result.forcedKill)
+        assertFalse(FakeServers.isAlive(server.pid))
+        assertFalse(Files.exists(runDir()))
+        assertFalse(server.shutdownHookInstalled)
+        assertTrue(System.nanoTime() - begin < TimeUnit.SECONDS.toNanos(20))
+    }
+
+    @Test
     fun runDirIsKeptOnRequest() {
         val result = start("ready", keepRunDir = true).stop()
 

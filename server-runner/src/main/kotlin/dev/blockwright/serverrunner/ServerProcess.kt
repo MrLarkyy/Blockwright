@@ -7,13 +7,15 @@ import java.nio.file.StandardCopyOption
 import java.util.concurrent.CompletableFuture
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.TimeoutException
+import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.seconds
 
 /**
  * A running Paper server and the owner of its process tree: [stop] (or [close]) ends it gracefully, kills it with
  * its descendants after the stop timeout, keeps the logs in the artefact directory and removes the run directory.
- * A JVM shutdown hook kills the tree if the owner never stops it.
+ * If the owner never stops it, a JVM shutdown hook kills the tree, keeps latest.log and removes the run directory;
+ * a hard kill of the owning JVM runs no hook and can leave both behind.
  */
 class ServerProcess private constructor(
     private val process: Process,
@@ -30,7 +32,9 @@ class ServerProcess private constructor(
     private val stdinLock = Any()
     private val pump = ConsoleLogPump(process.inputStream, consoleLog)
     private val ready = CompletableFuture<Unit>()
-    private val shutdownHook = Thread({ ProcessTree.kill(process, wait = 5) }, "blockwright-paper-shutdown")
+    private val shutdownHook = Thread(::onShutdown, "blockwright-paper-shutdown")
+    private val cleanupLock = Any()
+    private var cleanup: Cleanup? = null
 
     @Volatile private var stopping = false
 
@@ -64,21 +68,63 @@ class ServerProcess private constructor(
     fun stop(): ServerRunResult {
         result?.let { return it }
         stopping = true
+        val interrupted = AtomicBoolean(false)
         val descendants = runCatching { process.descendants().toList() }.getOrDefault(emptyList())
         var forced = false
         if (process.isAlive) {
             runCatching { writeLine("stop") }
-            forced = !process.waitFor(stopTimeout.inWholeMilliseconds, TimeUnit.MILLISECONDS)
+            forced = try {
+                !process.waitFor(stopTimeout.inWholeMilliseconds, TimeUnit.MILLISECONDS)
+            } catch (_: InterruptedException) {
+                // An interrupted owner still gets a clean end: no graceful wait, straight to the kill.
+                interrupted.set(true)
+                true
+            }
         }
-        ProcessTree.kill(process, descendants)
-        runCatching { stdin.close() }
-        pump.join(PUMP_DRAIN)
+        val done = finish(descendants, PUMP_DRAIN, interrupted)
         val exitCode = if (process.isAlive) null else process.exitValue()
-        val latestLog = copyLatestLog()
-        val runDirKept = keepRunDir || !RunDirectory.delete(runDir)
         removeShutdownHook()
-        return ServerRunResult(exitCode, forced, consoleLog, latestLog, runDir, runDirKept).also { result = it }
+        if (interrupted.get()) Thread.currentThread().interrupt()
+        return ServerRunResult(exitCode, forced, consoleLog, done.latestLog, runDir, done.runDirKept).also { result = it }
     }
+
+    /**
+     * What the JVM shutdown hook runs when the owner never called [stop]: the same kill and cleanup without the
+     * graceful wait. Not synchronized: a [stop] blocked in its graceful wait must not stall the JVM exit.
+     */
+    internal fun onShutdown() {
+        stopping = true
+        val descendants = runCatching { process.descendants().toList() }.getOrDefault(emptyList())
+        finish(descendants, SHUTDOWN_DRAIN, AtomicBoolean(false))
+    }
+
+    /** Kills the tree, drains the console and, once, keeps latest.log and removes the run directory. */
+    private fun finish(descendants: List<ProcessHandle>, drain: Duration, interrupted: AtomicBoolean): Cleanup {
+        try {
+            ProcessTree.kill(process, descendants)
+        } catch (_: InterruptedException) {
+            interrupted.set(true)
+        }
+        runCatching { stdin.close() }
+        try {
+            pump.join(drain)
+        } catch (_: InterruptedException) {
+            interrupted.set(true)
+        }
+        synchronized(cleanupLock) {
+            cleanup?.let { return it }
+            val latestLog = copyLatestLog()
+            val runDirKept = keepRunDir || try {
+                !RunDirectory.delete(runDir)
+            } catch (_: InterruptedException) {
+                interrupted.set(true)
+                Files.exists(runDir)
+            }
+            return Cleanup(latestLog, runDirKept).also { cleanup = it }
+        }
+    }
+
+    private class Cleanup(val latestLog: Path?, val runDirKept: Boolean)
 
     override fun close() {
         stop()
@@ -121,6 +167,7 @@ class ServerProcess private constructor(
 
     companion object {
         private val PUMP_DRAIN = 5.seconds
+        private val SHUTDOWN_DRAIN = 2.seconds
 
         /** Launches [command] in [runDir] and waits for readiness; on any failure nothing is left running. */
         internal fun start(
