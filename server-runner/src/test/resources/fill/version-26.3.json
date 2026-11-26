@@ -1,0 +1,11 @@
+{
+  "version": {
+    "id": "26.3",
+    "support": { "status": "SUPPORTED" },
+    "java": {
+      "version": { "minimum": 25 },
+      "flags": { "recommended": ["-XX:+UseG1GC"] }
+    }
+  },
+  "builds": [263, 262, 261]
+}
