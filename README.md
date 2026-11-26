@@ -19,3 +19,6 @@ Gradle runs on JDK 17 or newer; the JDK 25 toolchain is found locally or downloa
 ```
 ./gradlew build
 ```
+
+Paper test servers: see [docs/server-runner.md](docs/server-runner.md); their real-server test runs with
+`./gradlew :server-runner:integrationTest -Pblockwright.acceptEula=true` (you accept the Minecraft EULA for that run).
