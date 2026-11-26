@@ -50,6 +50,8 @@ class PaperServerIntegrationTest {
             first.stop()
         }
 
+        assertFalse(result.forcedKill)
+        assertEquals(0, result.exitCode)
         assertFalse(FakeServers.isAlive(pid))
         descendants.forEach { assertFalse(FakeServers.isAlive(it)) }
         assertFalse(result.runDirKept)
