@@ -2,12 +2,15 @@ package dev.blockwright.orchestrator.bench
 
 import java.util.concurrent.ConcurrentHashMap
 
-/** Kills tracked child processes when the JVM exits, so an interrupted run leaves nothing behind. */
+/**
+ * Kills tracked client processes and their children when the JVM exits. The hook leaves the bw-bench-* temp
+ * dir alone: deleting it there would race with a concurrent close().
+ */
 object ChildProcessReaper {
     private val tracked: MutableSet<Process> = ConcurrentHashMap.newKeySet()
 
     init {
-        Runtime.getRuntime().addShutdownHook(Thread({ tracked.forEach(::kill) }, "bench-reaper"))
+        Runtime.getRuntime().addShutdownHook(Thread({ reapAll() }, "bench-reaper"))
     }
 
     fun track(process: Process) {
@@ -18,8 +21,10 @@ object ChildProcessReaper {
         tracked.remove(process)
     }
 
-    private fun kill(process: Process) {
-        process.descendants().forEach { it.destroyForcibly() }
-        process.destroyForcibly()
+    internal fun reapAll() {
+        tracked.forEach { process ->
+            process.descendants().forEach { it.destroyForcibly() }
+            process.destroyForcibly()
+        }
     }
 }

@@ -2,8 +2,6 @@ package dev.blockwright.orchestrator.bench
 
 import java.util.Locale
 
-enum class VerdictStatus { PASS, FAIL, NOT_RUN }
-
 data class Verdict(
     val profile: String,
     val metric: Metric,

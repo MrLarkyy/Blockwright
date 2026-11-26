@@ -31,7 +31,7 @@ warm sample). A breach prints `FAIL profile=P metric=M value=V budget=B unit=U`.
 
 PSS is read from `/proc/<pid>/smaps_rollup` (fallback: the sum of `/proc/<pid>/smaps`) and exists on Linux only. On
 Windows and macOS it is reported `NOT_RUN` with a reason; there is no RSS substitute. A `NOT_RUN` metric is not
-gated, except with `--strict`, where a budgeted `NOT_RUN` metric fails (CI runs strict on Linux, so a broken probe
+gated, except with `--strict`, where a budgeted `NOT_RUN` metric of a profile that ran fails (a non-required profile without a target stays `NOT_RUN`) (CI runs strict on Linux, so a broken probe
 cannot pass silently).
 
 ## Budgets file
@@ -43,7 +43,7 @@ cannot pass silently).
 ```
 
 Budgets are absolute ceilings per profile. A required profile without a bench target fails the gate; a non-required
-one is reported `NOT_RUN`. The `stub` profile gates the harness itself (a stand-in child JVM), not the product; its
+one is reported `NOT_RUN`, also under `--strict`. The `stub` profile gates the harness itself (a stand-in child JVM), not the product; its
 ceilings are generous. `logic`, `snapshot` and `live` are listed without budgets until a real target exists.
 
 ## Adding a profile
