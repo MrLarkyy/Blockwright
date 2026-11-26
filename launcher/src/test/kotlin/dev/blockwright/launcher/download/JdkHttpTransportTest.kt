@@ -197,6 +197,7 @@ class JdkHttpTransportTest {
     }
 
     private companion object {
-        const val IDLE_MS = 300L
+        // The idle timeout also bounds the headers, so it must outlast a loaded host delivering them; only the stall may trip it.
+        const val IDLE_MS = 2_000L
     }
 }
