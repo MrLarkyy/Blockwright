@@ -1,3 +1,3 @@
 plugins {
-    id("blockwright.kotlin-module")
+    id("blockwright.kotlin-serialization")
 }
