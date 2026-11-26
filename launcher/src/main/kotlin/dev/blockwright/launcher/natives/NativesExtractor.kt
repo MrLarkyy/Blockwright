@@ -71,11 +71,11 @@ class NativesExtractor(private val limits: ExtractionLimits = ExtractionLimits()
     private fun swap(staging: Path, target: Path) {
         val old = target.resolveSibling("${target.fileName}$BACKUP${UUID.randomUUID()}")
         val hadOld = Files.exists(target)
-        if (hadOld) Files.move(target, old)
+        if (hadOld) moveDirectory(target, old)
         try {
             moveDirectory(staging, target)
         } catch (e: IOException) {
-            if (hadOld) runCatching { Files.move(old, target) }
+            if (hadOld) runCatching { moveDirectory(old, target) }
             throw e
         }
         if (hadOld) discard(old)

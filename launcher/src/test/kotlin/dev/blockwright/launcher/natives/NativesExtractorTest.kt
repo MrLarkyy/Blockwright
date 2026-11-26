@@ -46,7 +46,8 @@ class NativesExtractorTest {
 
     /**
      * Makes [file] undeletable while its directory can still be renamed, as a library does that some process
-     * has loaded: no write permission on the directory (POSIX) or a read-only file (Windows).
+     * has loaded: no write permission on the directory (POSIX; the JDK refuses a plain move of such a directory,
+     * so the extractor must move atomically) or a read-only file (Windows).
      */
     private fun protect(file: Path) {
         if (posix) Files.setPosixFilePermissions(file.parent, PosixFilePermissions.fromString("r-x------")) else file.toFile().setReadOnly()
