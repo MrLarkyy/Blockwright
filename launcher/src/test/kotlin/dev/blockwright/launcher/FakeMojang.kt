@@ -25,6 +25,7 @@ class FakeMojang(val transport: FakeTransport = FakeTransport()) {
         serveAsset("assetB", ByteArray(3000) { (it % 7).toByte() })
         serve("assetIndex", ASSET_INDEX_URL, render("asset-index.json"))
         serve("version", VERSION_URL, render("version.json"))
+        transport.put(SPACED_VERSION_URL, payloads.getValue("version"))
         transport.put(VersionResolver.MANIFEST_URI, render("manifest.json"))
     }
 
@@ -51,6 +52,10 @@ class FakeMojang(val transport: FakeTransport = FakeTransport()) {
     companion object {
         const val VERSION_ID = "1.0-test"
         const val VERSION_URL = "https://piston-meta.mojang.com/v1/packages/fixture/1.0-test.json"
+
+        /** A second manifest entry for the same version JSON, shaped like the real ids that contain spaces. */
+        const val SPACED_VERSION_ID = "1.0 Test Pre-Release 2"
+        const val SPACED_VERSION_URL = "https://piston-meta.mojang.com/v1/packages/fixture/1.0%20Test%20Pre-Release%202.json"
         const val ASSET_INDEX_URL = "https://piston-meta.mojang.com/v1/packages/fixture/test-1.json"
         val LEGACY_NATIVE = "legacy native code".toByteArray()
         private val PLACEHOLDER = Regex("\\{\\{(sha1|size):(\\w+)}}")

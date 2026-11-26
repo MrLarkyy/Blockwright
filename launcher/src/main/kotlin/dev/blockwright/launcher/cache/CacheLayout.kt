@@ -37,7 +37,8 @@ class CacheLayout(root: Path) {
     private fun versionDir(id: String): Path = root.resolve("versions").resolve(checkId(id))
 
     private fun checkId(id: String): String {
-        if (!ID.matches(id) || isBookkeepingName(id)) throw DownloadException("invalid version id: ${printable(id)}")
+        val valid = id.length <= MAX_ID_LENGTH && ID.matches(id) && !isBookkeepingName(id)
+        if (!valid) throw DownloadException("invalid version id: ${printable(id)}")
         return id
     }
 
@@ -72,7 +73,13 @@ class CacheLayout(root: Path) {
         value.take(MAX_SHOWN).map { if (it.isISOControl()) '?' else it }.joinToString("")
 
     companion object {
-        private val ID = Regex("[A-Za-z0-9][A-Za-z0-9._+-]{0,63}")
+        /**
+         * Letters, digits and `._+-`, with single spaces inside (`1.14 Pre-Release 5`, `3D Shareware v1.34`). Both
+         * ends are a letter or digit: Windows drops a trailing dot or space from a name, which would fold two ids
+         * into one directory.
+         */
+        private val ID = Regex("[A-Za-z0-9](?:[A-Za-z0-9._+-]| (?! ))*(?<=[A-Za-z0-9])")
+        private const val MAX_ID_LENGTH = 64
         private val HASH = Regex("[0-9a-f]{40}")
         private const val MAX_SHOWN = 120
         private const val APP = "blockwright"

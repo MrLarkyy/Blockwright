@@ -11,6 +11,15 @@
       "complianceLevel": 1
     },
     {
+      "id": "1.0 Test Pre-Release 2",
+      "type": "snapshot",
+      "url": "https://piston-meta.mojang.com/v1/packages/fixture/1.0%20Test%20Pre-Release%202.json",
+      "time": "2026-01-15T00:00:00+00:00",
+      "releaseTime": "2026-01-15T00:00:00+00:00",
+      "sha1": "{{sha1:version}}",
+      "complianceLevel": 1
+    },
+    {
       "id": "1.0-test",
       "type": "release",
       "url": "https://piston-meta.mojang.com/v1/packages/fixture/1.0-test.json",

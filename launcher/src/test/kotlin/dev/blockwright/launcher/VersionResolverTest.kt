@@ -130,6 +130,25 @@ class VersionResolverTest {
     }
 
     @Test
+    fun versionIdWithSpacesResolvesThroughItsEncodedUrl() {
+        val id = FakeMojang.SPACED_VERSION_ID
+
+        val resolved = resolver().resolve(ResolveRequest(id, includeAssets = true))
+
+        assertEquals(1, transport.callsTo(URI(FakeMojang.SPACED_VERSION_URL)))
+        assertEquals(0, transport.callsTo(URI(FakeMojang.VERSION_URL)))
+        assertEquals(root.resolve("versions").resolve(id).resolve("$id.jar"), resolved.clientJar)
+        assertEquals(mojang.sha1("client"), Sha1.of(resolved.clientJar))
+        assertEquals(root.resolve("natives").resolve(id), resolved.nativesDir)
+        assertArrayEquals(FakeMojang.LEGACY_NATIVE, Files.readAllBytes(resolved.nativesDir.resolve("liblegacy.so")))
+        transport.calls.clear()
+        transport.offline = true
+
+        assertEquals(resolved, resolver().resolve(ResolveRequest(id, includeAssets = true)))
+        assertEquals(emptyList<FakeTransport.Call>(), transport.calls)
+    }
+
+    @Test
     fun unknownVersionIsAnError() {
         val error = assertThrows<DownloadException> { resolver().resolve(ResolveRequest("9.9-missing")) }
         assertTrue(error.message!!.contains("unknown version"), error.message)

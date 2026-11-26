@@ -31,7 +31,12 @@ class CacheLayoutTest {
     }
 
     @ParameterizedTest
-    @ValueSource(strings = ["../evil", "a/b", "a\\b", ".hidden", "", "1.21 4", "C:", "a12345678901234567890123456789012345678901234567890123456789012345"])
+    @ValueSource(
+        strings = [
+            "../evil", "a/b", "a\\b", ".hidden", "", "C:", "a12345678901234567890123456789012345678901234567890123456789012345",
+            "1.21  4", " 1.21", "1.21 ", "1.21.", "1.21-", "1.21\t4", "1.21 4", "1 /../x", "1.14 Pre-Release 5/..", "1 .. 2/x",
+        ],
+    )
     fun rejectsBadVersionIds(id: String) {
         assertThrows<DownloadException> { layout.versionJson(id) }
         assertThrows<DownloadException> { layout.nativesDir(id) }
@@ -60,6 +65,24 @@ class CacheLayoutTest {
             assertEquals(root.resolve("versions/$id/$id.json").normalize(), layout.versionJson(id))
             assertEquals(root.resolve("versions/$id/$id.jar").normalize(), layout.clientJar(id))
         }
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = ["1.14 Pre-Release 5", "1.14.2 Pre-Release 4", "3D Shareware v1.34", "a b", "1 2 3"])
+    fun acceptsVersionIdsWithSingleSpacesAndKeepsThemInsideTheCache(id: String) {
+        val json = layout.versionJson(id)
+        assertEquals(root.resolve("versions").resolve(id).resolve("$id.json"), json)
+        assertEquals(root.resolve("versions").resolve(id).resolve("$id.jar"), layout.clientJar(id))
+        assertEquals(root.resolve("natives").resolve(id), layout.nativesDir(id))
+        assertEquals(json.normalize(), json)
+        assertTrue(json.startsWith(root))
+
+        Files.createDirectories(json.parent)
+        Files.writeString(json, "{}")
+
+        // The name on disk is the id, unchanged: the file system folded or trimmed nothing.
+        val onDisk = Files.list(root.resolve("versions")).use { entries -> entries.map { it.fileName.toString() }.toList() }
+        assertEquals(listOf(id), onDisk)
     }
 
     @ParameterizedTest
