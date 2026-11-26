@@ -32,7 +32,9 @@ class FillApiClient(
                 if (it.id != build) throw PaperDownloadException("Fill answered build ${it.id} for Paper $version build $build")
             }
         } else {
-            fetch<List<FillBuild>>("versions/$version/builds", "Paper $version builds").firstOrNull { it.channel == STABLE }
+            fetch<List<FillBuild>>("versions/$version/builds", "Paper $version builds")
+                .filter { it.channel == STABLE }
+                .maxByOrNull { it.id }
                 ?: throw PaperDownloadException("Paper $version has no $STABLE build on Fill; pin a build explicitly")
         }
         return toPaperBuild(version, chosen, javaMinimum)

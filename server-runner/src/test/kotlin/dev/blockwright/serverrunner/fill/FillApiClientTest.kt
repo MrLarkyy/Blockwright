@@ -29,8 +29,9 @@ class FillApiClientTest {
 
     private fun serveVersion() = server.text("${base}versions/26.3", fixture("version-26.3.json"))
 
+    // The fixture lists builds oldest first: the choice must not depend on Fill's order.
     @Test
-    fun newestStableBuildWinsOverANewerBeta() {
+    fun newestStableBuildWinsOverANewerBetaAndAnOlderStable() {
         serveVersion()
         server.text("${base}versions/26.3/builds", fixture("builds-26.3.json"))
 
