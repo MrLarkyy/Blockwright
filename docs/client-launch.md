@@ -115,7 +115,7 @@ server's disconnect reason cannot forge a field either.
 A logic client reports `video=dummy gpu=Blockwright_headless sound=off assetReads=0`.
 
 In both profiles Minecraft's blocking error boxes are not shown: nobody can click them in a client the launcher started,
-so a box would hang it until the join timeout (seen with no usable OpenGL under a display without GLX). The box's text
+so a box would hang it until the join timeout (seen under Xvfb, where no GLX visual matches). The box's text
 becomes an `alert` line, and a window or GPU backend that cannot be created a `failed` line: `awaitJoined` fails at
 once with Minecraft's reason, as it does when the client process exits.
 
@@ -164,6 +164,9 @@ client and the Fabric runtime into the cache next to the default one (`blockwrig
 `-Dblockwright.it.cacheDir=<dir>`) and build the agent jar first. `HeadlessClientIntegrationTest` (join without
 display, 30 s in the world, graceful stop, a refused join failing fast), `ClientParentDeathIntegrationTest` (the client
 exits within 20 s after its parent is killed) and `MovementParityIntegrationTest` (needs a display for the reference:
-skipped without one, unless `-Pblockwright.requireParity=true` makes that a failure; Linux CI runs it under `xvfb-run`
-with a 24-bit GLX screen and Mesa's llvmpipe software renderer). Without the EULA flag every one of them is reported as skipped. In CI the `client-integration` job runs them
-on Windows and Linux only on a manual `workflow_dispatch` with `accept_eula`.
+skipped without one, unless `-Pblockwright.requireParity=true` makes that a failure). Without the EULA flag every one
+of them is reported as skipped. In CI the `client-integration` job runs them on Windows and Linux only on a manual
+`workflow_dispatch` with `accept_eula`; on Linux the reference runs on a virtual Xorg display (dummy driver,
+`.github/xorg-dummy.conf`) with Mesa's llvmpipe software renderer. Xvfb does not work: Minecraft asks for an
+sRGB-capable framebuffer, and Xvfb gives no sRGB-capable GLX configuration a visual (`Couldn't find matching GLX
+visual`); the Xorg configuration sets `GlxVisuals "all"`.
