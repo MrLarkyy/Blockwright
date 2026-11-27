@@ -53,9 +53,37 @@ class RuleEvaluatorTest {
     }
 
     @Test
-    fun featureRulesNeverMatch() {
+    fun featureRulesNeverMatchWithoutFeatures() {
         val features = buildJsonObject { put("is_demo_user", JsonPrimitive(true)) }
         assertFalse(linux.allows(listOf(Rule(ALLOW, features = features))))
         assertTrue(linux.allows(listOf(Rule(ALLOW), Rule(DISALLOW, features = features))))
+    }
+
+    @Test
+    fun featureRuleMatchesOnlyWhenEveryNamedFeatureHasItsValue() {
+        val quickPlay = listOf(Rule(ALLOW, features = buildJsonObject { put("is_quick_play_multiplayer", JsonPrimitive(true)) }))
+        assertTrue(linux.allows(quickPlay, mapOf("is_quick_play_multiplayer" to true)))
+        assertFalse(linux.allows(quickPlay, mapOf("is_quick_play_multiplayer" to false)))
+        assertFalse(linux.allows(quickPlay, mapOf("is_demo_user" to true)))
+
+        val both = buildJsonObject {
+            put("is_quick_play_multiplayer", JsonPrimitive(true))
+            put("has_custom_resolution", JsonPrimitive(true))
+        }
+        assertFalse(linux.allows(listOf(Rule(ALLOW, features = both)), mapOf("is_quick_play_multiplayer" to true)))
+    }
+
+    @Test
+    fun aFeatureRequiredFalseMatchesAMissingFeature() {
+        val notDemo = listOf(Rule(ALLOW, features = buildJsonObject { put("is_demo_user", JsonPrimitive(false)) }))
+        assertTrue(linux.allows(notDemo))
+        assertFalse(linux.allows(notDemo, mapOf("is_demo_user" to true)))
+    }
+
+    @Test
+    fun featureAndOsMustBothMatch() {
+        val rule = listOf(Rule(ALLOW, OsRule(name = "osx"), buildJsonObject { put("is_quick_play_multiplayer", JsonPrimitive(true)) }))
+        assertTrue(mac.allows(rule, mapOf("is_quick_play_multiplayer" to true)))
+        assertFalse(linux.allows(rule, mapOf("is_quick_play_multiplayer" to true)))
     }
 }

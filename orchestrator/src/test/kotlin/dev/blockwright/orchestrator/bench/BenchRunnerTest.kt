@@ -127,4 +127,58 @@ class BenchRunnerTest {
         val result = runner().run("fake", ProfileBudget(idleSeconds = 1, activeSeconds = 1, screenshots = 1), FakeTarget())
         assertInstanceOf(Measurement.NotRun::class.java, result.metrics.getValue(Metric.WarmStart))
     }
+
+    @Test
+    fun zeroScreenshotsIsNotRunInsteadOfCrashing() {
+        val target = FakeTarget()
+        val result = runner().run("fake", config.copy(screenshots = 0), target)
+        assertInstanceOf(Measurement.NotRun::class.java, result.metrics.getValue(Metric.ScreenshotP95))
+        value(result, Metric.ColdStart)
+        assertThrows<IllegalArgumentException> { BenchRunner.percentile95(emptyList()) }
+    }
+
+    @Test
+    fun aClientWithoutLoadSupportDoesNotRunTheActiveCpuMetric() {
+        val clients = mutableListOf<FakeClient>()
+        val target = object : BenchTarget {
+            override val profile = "noload"
+            override fun launch(workDir: Path): BenchClient {
+                val client = FakeClient(clients.size + 1L, time, 100.milliseconds, false, 10.milliseconds)
+                clients += client
+                return object : BenchClient by client {
+                    override val supportsLoad = false
+                }
+            }
+        }
+        val result = runner().run("noload", config, target)
+        assertInstanceOf(Measurement.NotRun::class.java, result.metrics.getValue(Metric.CpuActive))
+        value(result, Metric.CpuIdle)
+        assertEquals(0, clients.sumOf { it.loads })
+    }
+
+    @Test
+    fun prepareRunsOnceBeforeTheFirstTimedStartAndItsFailureFailsTheProfile() {
+        val events = mutableListOf<String>()
+        val prepared = object : BenchTarget {
+            override val profile = "prepared"
+            val inner = FakeTarget()
+            override fun prepare() {
+                events += "prepare"
+                time += 5000.milliseconds
+            }
+            override fun launch(workDir: Path): BenchClient = inner.launch(workDir).also { events += "launch" }
+        }
+        val result = runner().run("prepared", config, prepared)
+        assertEquals("prepare", events.first())
+        assertEquals(1, events.count { it == "prepare" })
+        assertEquals(100.0, value(result, Metric.ColdStart).aggregate, "prepare time leaked into the cold start")
+
+        val failing = object : BenchTarget {
+            override val profile = "failing"
+            override fun prepare() = throw BenchException("server did not start")
+            override fun launch(workDir: Path): BenchClient = error("launched without preparation")
+        }
+        val failed = runner().run("failing", config, failing)
+        Metric.entries.forEach { assertInstanceOf(Measurement.Failed::class.java, failed.metrics.getValue(it), it.name) }
+    }
 }

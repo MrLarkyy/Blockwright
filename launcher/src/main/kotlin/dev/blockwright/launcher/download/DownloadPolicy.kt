@@ -15,7 +15,7 @@ data class DownloadPolicy(
     val idleTimeout: Duration = Duration.ofSeconds(30),
     val attempts: Int = 3,
     val parallelism: Int = 8,
-    val allowedHosts: List<String> = listOf("*.mojang.com", "*.minecraft.net"),
+    val allowedHosts: List<String> = DEFAULT_HOSTS,
     val httpsOnly: Boolean = true,
     val jsonMaxBytes: Long = 16L * 1024 * 1024,
     val retryDelay: Duration = Duration.ofMillis(500),
@@ -52,7 +52,10 @@ data class DownloadPolicy(
             host == pattern
         }
 
-    private companion object {
-        const val MAX_DOUBLINGS = 20
+    companion object {
+        private const val MAX_DOUBLINGS = 20
+
+        /** Mojang for the client, the Fabric maven and Maven Central for the pinned Fabric loader runtime. */
+        val DEFAULT_HOSTS = listOf("*.mojang.com", "*.minecraft.net", "maven.fabricmc.net", "repo.maven.apache.org")
     }
 }

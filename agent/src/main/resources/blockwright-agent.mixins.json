@@ -1,0 +1,28 @@
+{
+  "required": true,
+  "minVersion": "0.8",
+  "package": "dev.blockwright.agent.mixin",
+  "compatibilityLevel": "JAVA_25",
+  "client": [
+    "ClientLevelMixin",
+    "DisconnectedScreenAccessor",
+    "GameRendererMixin",
+    "GlBackendMixin",
+    "KeyboardInputMixin",
+    "LoadingOverlayAccessor",
+    "LocalPlayerMixin",
+    "MessageBoxMixin",
+    "MinecraftMixin",
+    "MultiPackResourceManagerMixin",
+    "ParticleEngineMixin",
+    "PreferredGraphicsApiMixin",
+    "ReloadableResourceManagerMixin",
+    "RenderSystemMixin",
+    "SoundEngineMixin",
+    "WaitingForPlayerChunkMixin",
+    "WindowInitFailedMixin"
+  ],
+  "injectors": {
+    "defaultRequire": 1
+  }
+}

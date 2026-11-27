@@ -31,7 +31,7 @@ object BudgetsLoader {
     private fun validate(name: String, profile: ProfileBudget) {
         check(profile.clients >= 1) { "profile $name: clients must be at least 1" }
         check(profile.warmRuns >= 0) { "profile $name: warmRuns must not be negative" }
-        check(profile.screenshots >= 1) { "profile $name: screenshots must be at least 1" }
+        check(profile.screenshots >= 0) { "profile $name: screenshots must not be negative (0 skips the metric)" }
         check(profile.idleSeconds >= 1 && profile.activeSeconds >= 1) {
             "profile $name: idleSeconds and activeSeconds must be at least 1"
         }

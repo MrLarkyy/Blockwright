@@ -35,6 +35,12 @@ class BudgetsLoaderTest {
     }
 
     @Test
+    fun zeroScreenshotsSkipsTheMetricButNegativeIsRejected() {
+        assertEquals(0, BudgetsLoader.parse(profile("""{"screenshots":0}""")).profiles.getValue("p").screenshots)
+        assertTrue("screenshots" in failure(profile("""{"screenshots":-1}""")))
+    }
+
+    @Test
     fun wrongSchemaVersionIsRejected() {
         assertTrue("schemaVersion" in failure("""{"schemaVersion":2,"profiles":{}}"""))
     }
@@ -61,5 +67,9 @@ class BudgetsLoaderTest {
         while (dir != null && !dir.resolve("perf/budgets.json").toFile().isFile) dir = dir.parent
         val file = BudgetsLoader.load(requireNotNull(dir) { "perf/budgets.json not found" }.resolve("perf/budgets.json"))
         assertTrue(file.profiles.getValue("stub").required)
+        val logic = file.profiles.getValue("logic")
+        assertEquals(false, logic.required)
+        assertEquals(0, logic.screenshots)
+        assertTrue(listOf("coldStartMs", "warmStartMs", "pssMiB").all { it in logic.budgets }, logic.budgets.toString())
     }
 }

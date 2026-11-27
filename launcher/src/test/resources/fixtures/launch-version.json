@@ -1,0 +1,35 @@
+{
+  "id": "1.0-launch",
+  "mainClass": "test.client.Main",
+  "assets": "7",
+  "assetIndex": {"id": "7", "sha1": "0000000000000000000000000000000000000000", "size": 1, "totalSize": 1, "url": "https://piston-meta.mojang.com/v1/packages/fixture/7.json"},
+  "downloads": {"client": {"sha1": "0000000000000000000000000000000000000000", "size": 1, "url": "https://piston-data.mojang.com/v1/objects/fixture/client.jar"}},
+  "javaVersion": {"component": "java-runtime-test", "majorVersion": 25},
+  "arguments": {
+    "game": [
+      "--username", "${auth_player_name}",
+      "--version", "${version_name}",
+      "--gameDir", "${game_directory}",
+      "--assetsDir", "${assets_root}",
+      "--assetIndex", "${assets_index_name}",
+      "--uuid", "${auth_uuid}",
+      "--accessToken", "${auth_access_token}",
+      "--clientId", "${clientid}",
+      "--xuid", "${auth_xuid}",
+      "--versionType", "${version_type}",
+      {"rules": [{"action": "allow", "features": {"is_demo_user": true}}], "value": "--demo"},
+      {"rules": [{"action": "allow", "features": {"has_custom_resolution": true}}], "value": ["--width", "${resolution_width}", "--height", "${resolution_height}"]},
+      {"rules": [{"action": "allow", "features": {"has_quick_plays_support": true}}], "value": ["--quickPlayPath", "${quickPlayPath}"]},
+      {"rules": [{"action": "allow", "features": {"is_quick_play_multiplayer": true}}], "value": ["--quickPlayMultiplayer", "${quickPlayMultiplayer}"]}
+    ],
+    "jvm": [
+      {"rules": [{"action": "allow", "os": {"name": "osx"}}], "value": ["-XstartOnFirstThread"]},
+      {"rules": [{"action": "allow", "os": {"name": "windows"}}], "value": "-XX:HeapDumpPath=test.heapdump"},
+      "-Djava.library.path=${natives_directory}/java",
+      "-Dminecraft.launcher.brand=${launcher_name}",
+      "-Dminecraft.launcher.version=${launcher_version}",
+      "-cp",
+      "${classpath}"
+    ]
+  }
+}

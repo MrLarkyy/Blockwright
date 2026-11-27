@@ -25,6 +25,21 @@ class DownloadPolicyTest {
     }
 
     @Test
+    fun permitsExactlyTheFabricMavenAndMavenCentralForTheLoaderRuntime() {
+        assertTrue(policy.permits(URI("https://maven.fabricmc.net/net/fabricmc/fabric-loader/0.20.1/fabric-loader-0.20.1.jar")))
+        assertTrue(policy.permits(URI("https://repo.maven.apache.org/maven2/org/ow2/asm/asm/9.10.1/asm-9.10.1.jar")))
+        for (url in listOf(
+            "http://maven.fabricmc.net/a.jar",
+            "https://evil.maven.fabricmc.net/a.jar",
+            "https://maven.fabricmc.net.example/a.jar",
+            "https://fabricmc.net/a.jar",
+            "https://central.repo.maven.apache.org/a.jar",
+        )) {
+            assertFalse(policy.permits(URI(url)), url)
+        }
+    }
+
+    @Test
     fun refusesOtherSchemesHostsAndCredentials() {
         for (url in listOf(
             "http://libraries.minecraft.net/a.jar",
