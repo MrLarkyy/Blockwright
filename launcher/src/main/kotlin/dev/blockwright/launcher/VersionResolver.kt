@@ -135,12 +135,13 @@ class VersionResolver(
         val incoming = json.resolveSibling("${json.fileName}.refresh")
         try {
             downloader.ensure(spec(uri(entry.url), incoming, entry.sha1, null, policy.jsonMaxBytes))
+            val details = ManifestJson.decode(VersionDetails.serializer(), incoming)
             move(incoming, json)
+            writeAtomically(sidecar, entry.sha1.lowercase())
+            return details
         } finally {
             Files.deleteIfExists(incoming)
         }
-        writeAtomically(sidecar, entry.sha1.lowercase())
-        return ManifestJson.decode(VersionDetails.serializer(), json)
     }
 
     private fun cachedDetails(id: String, json: Path): VersionDetails? {

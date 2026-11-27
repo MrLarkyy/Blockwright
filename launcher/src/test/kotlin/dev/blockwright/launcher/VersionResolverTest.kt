@@ -173,6 +173,22 @@ class VersionResolverTest {
     }
 
     @Test
+    fun undecodableReplacementJsonKeepsTheCachedJsonAndSidecar() {
+        val first = resolve()
+        val body = "not json at all".toByteArray()
+        transport.put(FakeMojang.VERSION_URL, body)
+        transport.put(VersionResolver.MANIFEST_URI, Files.readString(cache.manifest()).replace(mojang.sha1("version"), Sha1.of(body)).toByteArray())
+        ageTheCachedJson(Duration.ofDays(2))
+
+        val second = resolve()
+
+        assertEquals(first, second)
+        assertEquals(mojang.sha1("version"), Sha1.of(cache.versionJson(FakeMojang.VERSION_ID)))
+        assertEquals(mojang.sha1("version"), Files.readString(sidecar))
+        assertTrue(Duration.between(Files.getLastModifiedTime(sidecar).toInstant(), Instant.now()) < Duration.ofMinutes(1))
+    }
+
+    @Test
     fun staleJsonIsNotCheckedWhenTheOnlyManifestIsTheCachedOne() {
         resolve()
         republish()
