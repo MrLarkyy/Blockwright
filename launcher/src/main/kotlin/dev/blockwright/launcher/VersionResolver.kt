@@ -20,6 +20,7 @@ import dev.blockwright.launcher.natives.ExtractionLimits
 import dev.blockwright.launcher.natives.NativeJar
 import dev.blockwright.launcher.natives.NativesExtractor
 import dev.blockwright.launcher.platform.Platform
+import java.io.IOException
 import java.net.URI
 import java.net.URISyntaxException
 import java.nio.file.AtomicMoveNotSupportedException
@@ -115,11 +116,11 @@ class VersionResolver(
         return refresh.isDue(Duration.between(checkedAt, clock.instant()).coerceAtLeast(Duration.ZERO))
     }
 
-    /** Never fails: the cached details stand in for anything that goes wrong. Always records the check. */
+    /** Never fails on I/O: the cached details stand in for anything that goes wrong. Always records the check. */
     private fun refreshed(id: String, json: Path, cached: VersionDetails): VersionDetails {
         val details = try {
             replacement(id, json)
-        } catch (_: DownloadException) {
+        } catch (_: IOException) {
             null
         }
         Files.setLastModifiedTime(cache.versionJsonSha1(id), FileTime.from(clock.instant()))

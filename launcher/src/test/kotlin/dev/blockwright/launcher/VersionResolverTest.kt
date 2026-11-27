@@ -173,6 +173,20 @@ class VersionResolverTest {
     }
 
     @Test
+    fun ioFailureDuringRefreshKeepsTheCachedJsonAndTouchesTheSidecar() {
+        val first = resolve()
+        republish()
+        Files.createDirectories(cache.versionJson(FakeMojang.VERSION_ID).resolveSibling("1.0-test.json.refresh").resolve("blocker"))
+        ageTheCachedJson(Duration.ofDays(2))
+
+        val second = resolve()
+
+        assertEquals(first, second)
+        assertEquals(mojang.sha1("version"), Files.readString(sidecar))
+        assertTrue(Duration.between(Files.getLastModifiedTime(sidecar).toInstant(), Instant.now()) < Duration.ofMinutes(1))
+    }
+
+    @Test
     fun undecodableReplacementJsonKeepsTheCachedJsonAndSidecar() {
         val first = resolve()
         val body = "not json at all".toByteArray()
