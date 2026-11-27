@@ -24,6 +24,8 @@ JdkHttpTransport(DownloadPolicy()).use { transport ->
 }
 ```
 
+The cache is shared by processes: concurrent resolves lock each entry with an OS file lock and transfer it once. The lock files live in `<cache>/locks/` (named by a hash of the entry's path), never beside a library, asset or jar.
+
 ## Profiles
 
 | profile | display | GPU | sound | render assets | use |

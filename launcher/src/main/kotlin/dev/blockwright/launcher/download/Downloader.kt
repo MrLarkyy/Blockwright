@@ -34,7 +34,7 @@ class Downloader(
     fun ensure(spec: DownloadSpec): Path {
         checkPermitted(spec.uri)
         if (isCached(spec)) return spec.target
-        return CacheFileLock.withLock(spec.target) {
+        return CacheFileLock.withLock(spec.lockFile) {
             if (isCached(spec)) spec.target else download(spec)
         }
     }
@@ -85,6 +85,7 @@ class Downloader(
 
     private fun download(spec: DownloadSpec): Path {
         val part = spec.target.resolveSibling("${spec.target.fileName}.part")
+        Files.createDirectories(spec.target.parent)
         if (spec.sha1 != null) Files.deleteIfExists(spec.target)
         var failure: DownloadException? = null
         repeat(policy.attempts) { attempt ->

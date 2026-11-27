@@ -9,7 +9,7 @@ import java.util.concurrent.locks.ReentrantLock
 
 /**
  * Exclusive access to one cache entry across threads and processes. A JVM may hold only one `FileLock` per file,
- * so threads first serialise on an in-process lock, then the holder takes the OS lock on `<target>.lock`. Lock
+ * so threads first serialise on an in-process lock, then the holder takes the OS lock on the lock file. Lock
  * files stay on disk: deleting one would let two processes lock different inodes of the same name.
  */
 object CacheFileLock {
@@ -20,18 +20,14 @@ object CacheFileLock {
 
     private val entries = HashMap<Path, Entry>()
 
-    /** Appended to the name of a cache entry to name its lock file. */
-    internal const val SUFFIX = ".lock"
-
-    fun <T> withLock(target: Path, block: () -> T): T {
-        val key = target.toAbsolutePath().normalize()
+    fun <T> withLock(lockFile: Path, block: () -> T): T {
+        val key = lockFile.toAbsolutePath().normalize()
         val entry = synchronized(entries) { entries.getOrPut(key) { Entry() }.also { it.users++ } }
         try {
             entry.lock.lockInterruptibly()
             try {
                 Files.createDirectories(key.parent)
-                val lockFile = key.resolveSibling("${key.fileName}$SUFFIX")
-                FileChannel.open(lockFile, CREATE, WRITE).use { channel ->
+                FileChannel.open(key, CREATE, WRITE).use { channel ->
                     channel.lock().use { return block() }
                 }
             } finally {

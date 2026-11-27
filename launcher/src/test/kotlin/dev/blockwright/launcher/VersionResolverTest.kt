@@ -64,6 +64,17 @@ class VersionResolverTest {
     }
 
     @Test
+    fun noLockFileLiesBesideACachedFile() {
+        resolve(includeAssets = true)
+        val locks = cache.root.resolve("locks")
+        val stray = Files.walk(cache.root).use { s ->
+            s.filter { it.fileName.toString().endsWith(".lock") && !it.startsWith(locks) }.toList()
+        }
+        assertEquals(emptyList<Path>(), stray)
+        assertTrue(Files.list(locks).use { it.count() } > 0)
+    }
+
+    @Test
     fun secondResolveUsesTheCacheWithoutNetwork() {
         val first = resolve()
         transport.calls.clear()

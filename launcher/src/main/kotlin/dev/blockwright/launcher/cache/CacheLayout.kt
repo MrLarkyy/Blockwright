@@ -1,14 +1,15 @@
 package dev.blockwright.launcher.cache
 
-import dev.blockwright.launcher.download.CacheFileLock
 import dev.blockwright.launcher.download.DownloadException
 import dev.blockwright.launcher.natives.NativesExtractor
 import java.nio.file.Path
+import java.security.MessageDigest
+import java.util.HexFormat
 
 /**
  * The shared download cache, laid out like the vanilla launcher's game directory. Every name that comes from a
- * manifest is validated so no resolved path can leave [root] and no version can take the name of a lock file or
- * of the staging or backup directory the cache keeps next to another version.
+ * manifest is validated so no resolved path can leave [root] and no version can take the name of the staging or
+ * backup directory the cache keeps next to another version.
  */
 class CacheLayout(root: Path) {
     val root: Path = root.toAbsolutePath().normalize()
@@ -34,6 +35,21 @@ class CacheLayout(root: Path) {
 
     fun nativesDir(id: String): Path = root.resolve("natives").resolve(checkId(id))
 
+    /**
+     * The lock file of a cache entry, in `<root>/locks`, never beside the payload. Named by a hash of the entry's
+     * path below [root] (lowercase, as Windows folds case) so a manifest-controlled path cannot clash with another
+     * file or directory there. Lock files are never deleted, like the entries they guard they only accumulate.
+     */
+    fun lockFile(target: Path): Path {
+        val absolute = target.toAbsolutePath().normalize()
+        if (!absolute.startsWith(root) || absolute == root) {
+            throw DownloadException("cache entry outside the cache: ${printable(absolute.toString())}")
+        }
+        val key = root.relativize(absolute).joinToString("/").lowercase()
+        val digest = MessageDigest.getInstance("SHA-256").digest(key.toByteArray(Charsets.UTF_8))
+        return root.resolve("locks").resolve("${HexFormat.of().formatHex(digest)}.lock")
+    }
+
     private fun versionDir(id: String): Path = root.resolve("versions").resolve(checkId(id))
 
     private fun checkId(id: String): String {
@@ -43,12 +59,11 @@ class CacheLayout(root: Path) {
     }
 
     /**
-     * Entries named by a version id share a directory with `<id>.lock` files and, for natives, `<id>.tmp-*` and
-     * `<id>.old-*` directories that are removed as crash leftovers. Compared without case: file systems may fold it.
+     * Natives directories share their parent with `<id>.tmp-*` and `<id>.old-*` directories that are removed as
+     * crash leftovers. Compared without case: file systems may fold it.
      */
     private fun isBookkeepingName(id: String): Boolean =
-        id.endsWith(CacheFileLock.SUFFIX, ignoreCase = true) ||
-            id.contains(NativesExtractor.STAGING, ignoreCase = true) ||
+        id.contains(NativesExtractor.STAGING, ignoreCase = true) ||
             id.contains(NativesExtractor.BACKUP, ignoreCase = true)
 
     private fun safeRelativePath(path: String): String {

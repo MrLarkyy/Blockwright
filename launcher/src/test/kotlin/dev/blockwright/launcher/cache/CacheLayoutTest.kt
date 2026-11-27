@@ -2,6 +2,7 @@ package dev.blockwright.launcher.cache
 
 import dev.blockwright.launcher.download.DownloadException
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertNotEquals
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows
@@ -44,8 +45,8 @@ class CacheLayoutTest {
     }
 
     @ParameterizedTest
-    @ValueSource(strings = ["1.8.lock", "1.8.LOCK", "1.8.9.tmp-0b0e5a3c", "1.8.tmp-", "1.8.Tmp-x.1", "1.8.9.old-crashed", "a.OLD-1"])
-    fun rejectsVersionIdsNamedLikeALockOrANativesStagingOrBackupDirectory(id: String) {
+    @ValueSource(strings = ["1.8.9.tmp-0b0e5a3c", "1.8.tmp-", "1.8.Tmp-x.1", "1.8.9.old-crashed", "a.OLD-1"])
+    fun rejectsVersionIdsNamedLikeAANativesStagingOrBackupDirectory(id: String) {
         assertThrows<DownloadException> { layout.nativesDir(id) }
         assertThrows<DownloadException> { layout.versionJson(id) }
         assertThrows<DownloadException> { layout.clientJar(id) }
@@ -53,8 +54,25 @@ class CacheLayoutTest {
     }
 
     @Test
+    fun lockFilesLiveInTheLocksDirectoryNamedByTheEntryPath() {
+        val jar = layout.library("a/b/c-1.0.jar")
+        val lock = layout.lockFile(jar)
+        assertEquals(root.resolve("locks"), lock.parent)
+        assertTrue(Regex("[0-9a-f]{64}\\.lock").matches(lock.fileName.toString()), lock.toString())
+        assertEquals(lock, layout.lockFile(jar))
+        assertEquals(lock, layout.lockFile(layout.library("A/B/C-1.0.JAR")))
+        assertNotEquals(lock, layout.lockFile(layout.library("a/b/c-1.1.jar")))
+    }
+
+    @Test
+    fun refusesALockForAnEntryOutsideTheCache() {
+        assertThrows<DownloadException> { layout.lockFile(root.resolveSibling("elsewhere.jar")) }
+        assertThrows<DownloadException> { layout.lockFile(root) }
+    }
+
+    @Test
     fun acceptsVersionIdsThatOnlyResembleThoseNames() {
-        for (id in listOf("lock", "1.8-lock", "1.8.locked", "1.8.tmp", "tmp-1", "1.8.old", "old-1", "1.8.0ld-1")) {
+        for (id in listOf("lock", "1.8.lock", "1.8-lock", "1.8.locked", "1.8.tmp", "tmp-1", "1.8.old", "old-1", "1.8.0ld-1")) {
             assertEquals(root.resolve("natives/$id").normalize(), layout.nativesDir(id))
         }
     }

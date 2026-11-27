@@ -47,7 +47,7 @@ class VersionResolver(
 ) {
     private val downloader = Downloader(transport, policy)
     private val selector = LibrarySelector(platform)
-    private val extractor = NativesExtractor(limits)
+    private val extractor = NativesExtractor(cache, limits)
 
     fun resolve(request: ResolveRequest): ResolvedVersion {
         val id = request.versionId
@@ -55,7 +55,7 @@ class VersionResolver(
         val selection = selector.select(details.libraries)
         val clientJar = cache.clientJar(id)
         val client = details.downloads.client
-        val clientSpec = DownloadSpec(uri(client.url), clientJar, client.sha1, client.size, client.size)
+        val clientSpec = spec(uri(client.url), clientJar, client.sha1, client.size, client.size)
         val librarySpecs = (selection.classpath + selection.natives.map { it.artifact }).map(::librarySpec)
         downloader.ensureAll(listOf(clientSpec) + librarySpecs)
         val nativeJars = selection.natives.map { NativeJar(libraryPath(it.artifact), it.artifact.sha1, it.excludes) }
@@ -81,14 +81,14 @@ class VersionResolver(
         cachedDetails(id, json)?.let { return it }
         // Locked on the sidecar (not the JSON, which the downloader locks) so concurrent resolves fetch the
         // manifest once: the waiter finds the verified JSON when it gets the lock.
-        return CacheFileLock.withLock(cache.versionJsonSha1(id)) {
+        return CacheFileLock.withLock(cache.lockFile(cache.versionJsonSha1(id))) {
             cachedDetails(id, json) ?: fetchDetails(id, json)
         }
     }
 
     private fun fetchDetails(id: String, json: Path): VersionDetails {
         val entry = manifestEntry(id)
-        downloader.ensure(DownloadSpec(uri(entry.url), json, entry.sha1, null, policy.jsonMaxBytes))
+        downloader.ensure(spec(uri(entry.url), json, entry.sha1, null, policy.jsonMaxBytes))
         writeAtomically(cache.versionJsonSha1(id), entry.sha1.lowercase())
         return ManifestJson.decode(VersionDetails.serializer(), json)
     }
@@ -107,7 +107,7 @@ class VersionResolver(
     private fun manifestEntry(id: String): VersionEntry {
         val target = cache.manifest()
         val refreshFailure = try {
-            downloader.ensure(DownloadSpec(manifestUri, target, null, null, policy.jsonMaxBytes))
+            downloader.ensure(spec(manifestUri, target, null, null, policy.jsonMaxBytes))
             null
         } catch (e: DownloadException) {
             if (!Files.isRegularFile(target)) throw e
@@ -120,18 +120,21 @@ class VersionResolver(
 
     private fun ensureAssets(ref: AssetIndexRef): Path {
         val indexFile = cache.assetIndex(ref.id)
-        downloader.ensure(DownloadSpec(uri(ref.url), indexFile, ref.sha1, ref.size, ref.size))
+        downloader.ensure(spec(uri(ref.url), indexFile, ref.sha1, ref.size, ref.size))
         val index = ManifestJson.decode(AssetIndex.serializer(), indexFile)
         val specs = index.objects.values.distinctBy { it.hash }.map { obj ->
             val target = cache.assetObject(obj.hash)
-            DownloadSpec(assetBaseUri.resolve("${obj.hash.substring(0, 2)}/${obj.hash}"), target, obj.hash, obj.size, obj.size)
+            spec(assetBaseUri.resolve("${obj.hash.substring(0, 2)}/${obj.hash}"), target, obj.hash, obj.size, obj.size)
         }
         downloader.ensureAll(specs)
         return cache.assetsDir()
     }
 
     private fun librarySpec(artifact: Artifact): DownloadSpec =
-        DownloadSpec(uri(artifact.url), libraryPath(artifact), artifact.sha1, artifact.size, artifact.size)
+        spec(uri(artifact.url), libraryPath(artifact), artifact.sha1, artifact.size, artifact.size)
+
+    private fun spec(uri: URI, target: Path, sha1: String?, size: Long?, maxBytes: Long): DownloadSpec =
+        DownloadSpec(uri, target, sha1, size, maxBytes, cache.lockFile(target))
 
     private fun libraryPath(artifact: Artifact): Path =
         cache.library(artifact.path ?: throw DownloadException("library download ${artifact.url} has no path"))

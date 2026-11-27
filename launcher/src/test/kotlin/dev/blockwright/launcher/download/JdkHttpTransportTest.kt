@@ -176,7 +176,7 @@ class JdkHttpTransportTest {
             exchange.sendResponseHeaders(200, payload.size.toLong())
             exchange.responseBody.write(payload)
         }
-        val spec = DownloadSpec(uri("/lib.jar"), dir.resolve("lib.jar"), Sha1.of(payload), payload.size.toLong(), payload.size.toLong())
+        val spec = DownloadSpec(uri("/lib.jar"), dir.resolve("lib.jar"), Sha1.of(payload), payload.size.toLong(), payload.size.toLong(), dir.resolve("locks/lib.lock"))
         val downloader = Downloader(transport, policy)
         downloader.ensure(spec)
         downloader.ensure(spec)

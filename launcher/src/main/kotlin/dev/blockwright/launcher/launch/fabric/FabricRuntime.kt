@@ -22,7 +22,10 @@ data class FabricRuntime(val loaderVersion: String, val artifacts: List<FabricAr
     }
 
     fun specs(cache: CacheLayout): List<DownloadSpec> =
-        artifacts.map { DownloadSpec(it.uri, cache.library(it.path), it.sha1, it.size, it.size) }
+        artifacts.map {
+            val path = cache.library(it.path)
+            DownloadSpec(it.uri, path, it.sha1, it.size, it.size, cache.lockFile(path))
+        }
 
     /** Ensures every jar and returns the classpath entries in the pinned order. */
     fun ensure(downloader: Downloader, cache: CacheLayout): List<Path> {
