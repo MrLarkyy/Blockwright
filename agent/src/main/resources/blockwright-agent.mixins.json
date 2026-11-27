@@ -1,0 +1,25 @@
+{
+  "required": true,
+  "minVersion": "0.8",
+  "package": "dev.blockwright.agent.mixin",
+  "compatibilityLevel": "JAVA_25",
+  "client": [
+    "ClientLevelMixin",
+    "DisconnectedScreenAccessor",
+    "GameRendererMixin",
+    "KeyboardInputMixin",
+    "LoadingOverlayAccessor",
+    "LocalPlayerMixin",
+    "MinecraftMixin",
+    "MultiPackResourceManagerMixin",
+    "ParticleEngineMixin",
+    "PreferredGraphicsApiMixin",
+    "ReloadableResourceManagerMixin",
+    "RenderSystemMixin",
+    "SoundEngineMixin",
+    "WaitingForPlayerChunkMixin"
+  ],
+  "injectors": {
+    "defaultRequire": 1
+  }
+}

@@ -1,0 +1,18 @@
+{
+  "schemaVersion": 1,
+  "id": "blockwright-agent",
+  "version": "${version}",
+  "name": "Blockwright agent",
+  "description": "In-client agent of Blockwright: headless profiles, lifecycle and observation.",
+  "environment": "client",
+  "entrypoints": {
+    "preLaunch": ["dev.blockwright.agent.BlockwrightAgent"]
+  },
+  "mixins": ["blockwright-agent.mixins.json"],
+  "depends": {
+    "fabricloader": ">=0.20.1",
+    "fabric-language-kotlin": ">=1.14.2",
+    "minecraft": "${minecraft}",
+    "java": ">=25"
+  }
+}

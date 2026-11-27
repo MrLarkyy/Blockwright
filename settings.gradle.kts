@@ -12,7 +12,9 @@ plugins {
 }
 
 dependencyResolutionManagement {
-    repositoriesMode = RepositoriesMode.FAIL_ON_PROJECT_REPOS
+    // Fabric Loom (agent) adds its own repositories for the Minecraft client and libraries it compiles against
+    // (Gradle cache only, never packaged); every other module declares none and uses the ones below.
+    repositoriesMode = RepositoriesMode.PREFER_PROJECT
     repositories {
         mavenCentral()
         maven("https://maven.fabricmc.net/")
