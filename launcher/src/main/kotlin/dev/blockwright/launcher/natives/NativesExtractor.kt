@@ -57,7 +57,6 @@ class NativesExtractor(private val cache: CacheLayout, private val limits: Extra
     }
 
     private fun replace(jars: List<NativeJar>, target: Path, marker: NativesMarker) {
-        Files.createDirectories(target.parent)
         val staging = target.resolveSibling("${target.fileName}$STAGING${UUID.randomUUID()}")
         try {
             Files.createDirectory(staging)

@@ -46,7 +46,7 @@ class CacheLayoutTest {
 
     @ParameterizedTest
     @ValueSource(strings = ["1.8.9.tmp-0b0e5a3c", "1.8.tmp-", "1.8.Tmp-x.1", "1.8.9.old-crashed", "a.OLD-1"])
-    fun rejectsVersionIdsNamedLikeAANativesStagingOrBackupDirectory(id: String) {
+    fun rejectsVersionIdsNamedLikeANativesStagingOrBackupDirectory(id: String) {
         assertThrows<DownloadException> { layout.nativesDir(id) }
         assertThrows<DownloadException> { layout.versionJson(id) }
         assertThrows<DownloadException> { layout.clientJar(id) }
