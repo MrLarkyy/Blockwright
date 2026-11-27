@@ -96,8 +96,9 @@ jobs:
             server-runner/build/blockwright-artifacts
 
   # Real 26.3 clients against a real Paper server: same EULA gate as server-integration. Windows and Linux start the
-  # logic client without any display; Linux also runs the parity reference (a real GL window) under xvfb with Mesa,
-  # where a missing display fails instead of skipping. The logic bench numbers go to the job summary.
+  # logic client without any display; Linux also runs the parity reference (a real GL window) under xvfb with Mesa's
+  # llvmpipe, where a missing display fails instead of skipping. The steps after the first run even when an earlier
+  # one failed (the job still fails), so a parity failure never hides the bench numbers; they go to the job summary.
   client-integration:
     if: github.event_name == 'workflow_dispatch' && inputs.accept_eula == true
     strategy:
@@ -121,12 +122,23 @@ jobs:
       - name: Headless client and parent death (no display)
         run: env -u DISPLAY -u WAYLAND_DISPLAY ./gradlew :launcher:integrationTest --tests '*HeadlessClient*' --tests '*ParentDeath*' -Pblockwright.acceptEula=true --console=plain --no-daemon
       - name: Install a virtual display with Mesa
-        if: runner.os == 'Linux'
-        run: sudo apt-get update && sudo apt-get install -y xvfb libgl1-mesa-dri
+        if: ${{ !cancelled() && runner.os == 'Linux' }}
+        run: sudo apt-get update && sudo apt-get install -y xvfb libgl1 libglx-mesa0 libgl1-mesa-dri mesa-utils
+      # xvfb-run's default screen is 8 bit deep: no GLX visual for an OpenGL context. 24 bit with GLX, software GL.
+      - name: Check the virtual display's OpenGL
+        if: ${{ !cancelled() && runner.os == 'Linux' }}
+        env:
+          LIBGL_ALWAYS_SOFTWARE: '1'
+          GALLIUM_DRIVER: llvmpipe
+        run: xvfb-run -a -s '-screen 0 1280x720x24 +extension GLX +render -noreset' glxinfo -B
       - name: Movement parity (reference under xvfb)
-        if: runner.os == 'Linux'
-        run: xvfb-run -a ./gradlew :launcher:integrationTest --tests '*MovementParity*' -Pblockwright.acceptEula=true -Pblockwright.requireParity=true --console=plain --no-daemon
+        if: ${{ !cancelled() && runner.os == 'Linux' }}
+        env:
+          LIBGL_ALWAYS_SOFTWARE: '1'
+          GALLIUM_DRIVER: llvmpipe
+        run: xvfb-run -a -s '-screen 0 1280x720x24 +extension GLX +render -noreset' ./gradlew :launcher:integrationTest --tests '*MovementParity*' -Pblockwright.acceptEula=true -Pblockwright.requireParity=true --console=plain --no-daemon
       - name: Bench the logic profile
+        if: ${{ !cancelled() }}
         run: ./gradlew :orchestrator:bench -Pbench.profile=logic -Pblockwright.acceptEula=true --console=plain --no-daemon
       - name: Publish bench summary
         if: always()
