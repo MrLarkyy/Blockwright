@@ -13,10 +13,10 @@ import org.junit.jupiter.api.io.TempDir
 class BenchMainTest {
     private class Run(val code: Int, val out: String, val err: String)
 
-    private fun run(vararg args: String): Run {
+    private fun run(vararg args: String, targets: (String) -> BenchTarget? = BenchTargets::forProfile, runner: BenchRunner = BenchRunner()): Run {
         val out = ByteArrayOutputStream()
         val err = ByteArrayOutputStream()
-        val code = BenchMain.run(args.toList(), PrintStream(out), PrintStream(err))
+        val code = BenchMain.run(args.toList(), PrintStream(out), PrintStream(err), runner, targets)
         return Run(code, out.toString(), err.toString())
     }
 
@@ -62,15 +62,54 @@ class BenchMainTest {
     fun aRequiredProfileWithoutATargetFails(@TempDir dir: Path) {
         val file = dir.resolve("b.json")
         Files.writeString(file, """{"schemaVersion":1,"profiles":{"logic":{"required":true}}}""")
-        assertEquals(1, run("--budgets", file.toString(), "--report-dir", dir.resolve("r").toString()).code)
+        assertEquals(1, run("--budgets", file.toString(), "--report-dir", dir.resolve("r").toString(), targets = { null }).code)
     }
 
     @Test
     fun anOptionalProfileWithoutATargetIsNotRun(@TempDir dir: Path) {
         val file = dir.resolve("b.json")
         Files.writeString(file, """{"schemaVersion":1,"profiles":{"logic":{"required":false}}}""")
-        val result = run("--budgets", file.toString(), "--report-dir", dir.resolve("r").toString(), "--strict")
+        val result = run("--budgets", file.toString(), "--report-dir", dir.resolve("r").toString(), "--strict", targets = { null })
         assertEquals(0, result.code)
+    }
+
+    private class ClosingTarget(private val failLaunch: Boolean) : BenchTarget {
+        override val profile = "stub"
+        var closed = 0
+
+        override fun launch(workDir: Path): BenchClient {
+            if (failLaunch) throw BenchException("cannot start")
+            return object : BenchClient {
+                override val pid = ProcessHandle.current().pid()
+                override val supportsLoad = false
+                override fun awaitReady(timeout: kotlin.time.Duration) = Unit
+                override fun screenshot(timeout: kotlin.time.Duration) = Unit
+                override fun startLoad() = Unit
+                override fun stopLoad() = Unit
+                override fun close() = Unit
+            }
+        }
+
+        override fun close() {
+            closed++
+        }
+    }
+
+    @Test
+    fun theTargetIsClosedAfterItsProfileAlsoWhenItFails(@TempDir dir: Path) {
+        for (failLaunch in listOf(false, true)) {
+            val target = ClosingTarget(failLaunch)
+            run("--budgets", budgets(dir, """"coldStartMs":60000""").toString(), "--report-dir", dir.resolve("r").toString(), targets = { target })
+            assertEquals(1, target.closed, "failLaunch=$failLaunch")
+        }
+    }
+
+    @Test
+    fun theTargetIsClosedWhenTheRunnerThrows(@TempDir dir: Path) {
+        val target = ClosingTarget(false)
+        val throwing = BenchRunner(pss = { error("probe crashed") })
+        runCatching { run("--budgets", budgets(dir, "").toString(), "--report-dir", dir.resolve("r").toString(), targets = { target }, runner = throwing) }
+        assertEquals(1, target.closed)
     }
 
     @Test

@@ -3,6 +3,11 @@ plugins {
     `java-test-fixtures`
 }
 
+dependencies {
+    implementation(project(":launcher"))
+    implementation(project(":server-runner"))
+}
+
 val benchMain = "dev.blockwright.orchestrator.bench.BenchMain"
 
 // A multi-process timing run: gated by its own CI job, never part of `check`. The gate logic itself is unit-tested.
@@ -24,5 +29,11 @@ tasks.register<JavaExec>("bench") {
             profile.orNull?.let { addAll(listOf("--profile", it)) }
         }
     })
+    // Real-client profiles: the agent jar, the client cache and, only by the user's explicit choice, the EULA.
+    val agentJar = project(":agent").tasks.named<Jar>("jar").flatMap { it.archiveFile }
+    inputs.file(agentJar)
+    jvmArgumentProviders.add(CommandLineArgumentProvider { listOf("-Dblockwright.agentJar=${agentJar.get().asFile.absolutePath}") })
+    providers.gradleProperty("blockwright.acceptEula").orNull?.let { systemProperty("blockwright.acceptEula", it) }
+    providers.systemProperty("blockwright.it.cacheDir").orNull?.let { systemProperty("blockwright.it.cacheDir", it) }
     outputs.upToDateWhen { false }
 }

@@ -18,7 +18,21 @@
         "screenshotP95Ms": 2000
       }
     },
-    "logic": { "required": false },
+    "logic": {
+      "required": false,
+      "clients": 2,
+      "warmRuns": 1,
+      "idleSeconds": 5,
+      "activeSeconds": 1,
+      "screenshots": 0,
+      "startTimeoutSeconds": 180,
+      "budgets": {
+        "coldStartMs": 90000,
+        "warmStartMs": 60000,
+        "pssMiB": 1024,
+        "cpuIdlePercent": 100
+      }
+    },
     "snapshot": { "required": false },
     "live": { "required": false }
   }

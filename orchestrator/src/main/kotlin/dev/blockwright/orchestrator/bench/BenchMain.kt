@@ -15,7 +15,13 @@ object BenchMain {
         exitProcess(run(args.toList(), System.out, System.err))
     }
 
-    fun run(args: List<String>, out: PrintStream, err: PrintStream, runner: BenchRunner = BenchRunner()): Int {
+    fun run(
+        args: List<String>,
+        out: PrintStream,
+        err: PrintStream,
+        runner: BenchRunner = BenchRunner(),
+        targets: (String) -> BenchTarget? = BenchTargets::forProfile,
+    ): Int {
         val startedAt = Instant.now()
         val options: BenchOptions
         val budgets: BudgetsFile
@@ -28,7 +34,7 @@ object BenchMain {
             return EXIT_CONFIG
         }
         val names = options.profile?.let { listOf(it) } ?: budgets.profiles.keys.sorted()
-        val results = names.map { name -> measure(runner, name, budgets.profiles.getValue(name)) }
+        val results = names.map { name -> measure(runner, targets, name, budgets.profiles.getValue(name)) }
         val gate = BudgetGate(options.strict)
         val verdicts = results.flatMap(gate::evaluate)
         val report = ReportBuilder.build(results, verdicts, options.strict, startedAt)
@@ -38,8 +44,8 @@ object BenchMain {
         return if (report.passed) EXIT_PASS else EXIT_BREACH
     }
 
-    private fun measure(runner: BenchRunner, name: String, config: ProfileBudget): ProfileResult {
-        val target = BenchTargets.forProfile(name) ?: return ProfileResult(name, config, false, emptyMap())
-        return runner.run(name, config, target)
+    private fun measure(runner: BenchRunner, targets: (String) -> BenchTarget?, name: String, config: ProfileBudget): ProfileResult {
+        val target = targets(name) ?: return ProfileResult(name, config, false, emptyMap())
+        return target.use { runner.run(name, config, it) }
     }
 }

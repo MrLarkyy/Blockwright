@@ -40,6 +40,7 @@ class BenchRunner(
         val timeout = config.startTimeoutSeconds.seconds
         val starts = mutableListOf<Double>()
         try {
+            target.prepare()
             repeat(config.clients) { starts += start(target, workDir, timeout, clients) }
         } catch (e: Exception) {
             return startFailure(starts, e)
@@ -58,8 +59,12 @@ class BenchRunner(
     private fun metricsWhileRunning(config: ProfileBudget, clients: List<BenchClient>, timeout: Duration) = mapOf(
         Metric.Pss to attempt { Measurement.combine(clients.map { pss(it.pid) }) { it.max() } },
         Metric.CpuIdle to attempt { cpuWindow(clients, config.idleSeconds.seconds, load = false) },
-        Metric.CpuActive to attempt { cpuWindow(clients, config.activeSeconds.seconds, load = true) },
-        Metric.ScreenshotP95 to attempt { screenshots(clients.first(), config.screenshots, timeout) },
+        Metric.CpuActive to
+            if (clients.all { it.supportsLoad }) attempt { cpuWindow(clients, config.activeSeconds.seconds, load = true) }
+            else Measurement.NotRun("the client cannot generate load yet"),
+        Metric.ScreenshotP95 to
+            if (config.screenshots == 0) Measurement.NotRun("screenshots: 0 in the budgets file")
+            else attempt { screenshots(clients.first(), config.screenshots, timeout) },
     )
 
     private fun start(target: BenchTarget, workDir: Path, timeout: Duration, clients: MutableList<BenchClient>): Double {
@@ -126,6 +131,9 @@ class BenchRunner(
         }
 
         /** Nearest-rank percentile. */
-        fun percentile95(samples: List<Double>): Double = samples.sorted()[ceil(0.95 * samples.size).toInt() - 1]
+        fun percentile95(samples: List<Double>): Double {
+            require(samples.isNotEmpty()) { "no samples for a percentile" }
+            return samples.sorted()[ceil(0.95 * samples.size).toInt() - 1]
+        }
     }
 }
