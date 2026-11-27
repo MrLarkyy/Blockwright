@@ -122,8 +122,8 @@ jobs:
           cache-read-only: true
       - name: Headless client and parent death (no display)
         run: env -u DISPLAY -u WAYLAND_DISPLAY ./gradlew :launcher:integrationTest --tests '*HeadlessClient*' --tests '*ParentDeath*' -Pblockwright.acceptEula=true --console=plain --no-daemon
-      # Minecraft needs an sRGB-capable GLX visual, which Xvfb never offers: Xorg with the dummy driver and every
-      # fbconfig as a visual (.github/xorg-dummy.conf), Mesa's llvmpipe for software GL.
+      # Xorg with the dummy driver and every GLX configuration as a visual (.github/xorg-dummy.conf), Mesa's llvmpipe
+      # for software GL. It has no sRGB-capable visual: the agent's sRGB fallback reports an alert in the reference.
       - name: Start a virtual display with Mesa
         if: ${{ !cancelled() && runner.os == 'Linux' }}
         run: |

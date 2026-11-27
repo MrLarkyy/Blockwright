@@ -1,6 +1,7 @@
 package dev.blockwright.agent
 
 import com.mojang.renderpearl.api.device.GpuBackend
+import dev.blockwright.agent.display.SrgbFallback
 import dev.blockwright.agent.logic.HeadlessDisplay
 import dev.blockwright.agent.logic.HeadlessFrame
 import dev.blockwright.agent.logic.LogicCuts
@@ -8,6 +9,7 @@ import dev.blockwright.agent.logic.gpu.NoopGpuBackend
 import net.minecraft.client.Minecraft
 import net.minecraft.client.multiplayer.ClientLevel
 import net.minecraft.client.player.LocalPlayer
+import org.lwjgl.sdl.SDLVideo
 
 /**
  * The only entry points of the mixins: each mixin hooks one place in the client and calls one function here,
@@ -17,6 +19,14 @@ import net.minecraft.client.player.LocalPlayer
 object AgentHooks {
     private const val CHUNK_SHIFT = 4
     private val cutsActive: Boolean get() = Agent.profile.cutsActive
+
+    private val srgbFallback = SrgbFallback(
+        srgbAttribute = SDLVideo.SDL_GL_FRAMEBUFFER_SRGB_CAPABLE,
+        openGlWindowFlag = SDLVideo.SDL_WINDOW_OPENGL,
+        setAttribute = { attribute, value -> SDLVideo.SDL_GL_SetAttribute(attribute, value) },
+        createWindow = { title, width, height, flags -> SDLVideo.SDL_CreateWindow(title, width, height, flags) },
+        status = { Agent.status.takeIf { Agent.profile != AgentProfile.NONE } },
+    )
 
     @JvmStatic
     fun beforeSdlInit() {
@@ -69,6 +79,11 @@ object AgentHooks {
 
     @JvmStatic
     fun onWindowInitFailed(message: String?) = Agent.startupFailures.onWindowInitFailed(message)
+
+    /** After Minecraft's OpenGL window failed: the window without the sRGB request, or 0 to keep the failure. */
+    @JvmStatic
+    fun openGlWindowWithoutSrgb(title: String, width: Int, height: Int, flags: Long): Long =
+        srgbFallback.retryWithoutSrgb(title, width, height, flags)
 
     @JvmStatic
     fun afterPlayerTick(player: LocalPlayer) {

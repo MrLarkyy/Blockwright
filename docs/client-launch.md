@@ -119,6 +119,11 @@ so a box would hang it until the join timeout (seen under Xvfb, where no GLX vis
 becomes an `alert` line, and a window or GPU backend that cannot be created a `failed` line: `awaitJoined` fails at
 once with Minecraft's reason, as it does when the client process exits.
 
+Minecraft's OpenGL backend asks for an sRGB-capable framebuffer, which Mesa's software GLX (Xvfb, Xorg with the dummy
+driver) never offers (`Couldn't find matching GLX visual`). Only after that window failed, in both launcher profiles,
+the agent creates it once more without the sRGB request and reports it once as an `alert`; colours may differ, the
+game does not. Where Minecraft's own window works nothing changes.
+
 ## Stopping and parent death
 
 `ClientProcess.stop()` closes the client's stdin. The agent turns EOF into `Minecraft.stop()` on the client thread, so
@@ -166,7 +171,6 @@ display, 30 s in the world, graceful stop, a refused join failing fast), `Client
 exits within 20 s after its parent is killed) and `MovementParityIntegrationTest` (needs a display for the reference:
 skipped without one, unless `-Pblockwright.requireParity=true` makes that a failure). Without the EULA flag every one
 of them is reported as skipped. In CI the `client-integration` job runs them on Windows and Linux only on a manual
-`workflow_dispatch` with `accept_eula`; on Linux the reference runs on a virtual Xorg display (dummy driver,
-`.github/xorg-dummy.conf`) with Mesa's llvmpipe software renderer. Xvfb does not work: Minecraft asks for an
-sRGB-capable framebuffer, and Xvfb gives no sRGB-capable GLX configuration a visual (`Couldn't find matching GLX
-visual`); the Xorg configuration sets `GlxVisuals "all"`.
+`workflow_dispatch` with `accept_eula`; on Linux the reference runs on a virtual Xorg display (dummy driver, every
+GLX configuration as a visual, `.github/xorg-dummy.conf`) with Mesa's llvmpipe software renderer, using the sRGB
+fallback below.
