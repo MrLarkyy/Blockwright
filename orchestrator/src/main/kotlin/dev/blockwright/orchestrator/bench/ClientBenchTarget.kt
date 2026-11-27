@@ -19,8 +19,8 @@ import kotlin.io.path.ExperimentalPathApi
 import kotlin.io.path.deleteRecursively
 
 /**
- * Real clients of one launch profile against one local Paper server. [prepare] resolves the client and starts the
- * server before anything is timed; [close] stops the server. Only built with the user's explicit EULA acceptance.
+ * Real clients of one launch profile against one local Paper server. [prepare] resolves the client, downloads the
+ * Fabric runtime and starts the server before anything is timed; [close] stops the server. Only built with the user's explicit EULA acceptance.
  * Each client (`bench1`, `bench2`, ...) is tracked by the reaper and also stops itself if this JVM dies.
  */
 class ClientBenchTarget(
@@ -36,10 +36,15 @@ class ClientBenchTarget(
     private var serverDir: Path? = null
     private var server: ServerProcess? = null
     private var version: ResolvedVersion? = null
+    private var fabricReady = false
     private var launched = 0
 
     override fun prepare() {
         if (version == null) version = VersionResolver(cache, transport, policy).resolve(ResolveRequest(VERSION))
+        if (!fabricReady) {
+            launcher.prepare()
+            fabricReady = true
+        }
         if (server == null) {
             val dir = Files.createTempDirectory("bw-bench-server-").also { serverDir = it }
             server = PaperServerRunner().start(

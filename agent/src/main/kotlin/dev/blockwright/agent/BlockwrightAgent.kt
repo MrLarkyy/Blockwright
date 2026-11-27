@@ -14,6 +14,7 @@ class BlockwrightAgent : PreLaunchEntrypoint {
             out = System.out,
             stdin = System.`in`,
             parentPid = ParentWatchdog.parsePid(System.getProperty(ParentWatchdog.PROPERTY)),
+            statusToken = System.getProperty(AgentStatus.TOKEN_PROPERTY),
             trace = System.getProperty(MovementTracer.PROPERTY)?.takeIf { it.isNotBlank() }?.let(Path::of),
             script = InputScript.named(System.getProperty(InputScript.PROPERTY)),
         )

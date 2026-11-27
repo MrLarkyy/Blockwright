@@ -10,6 +10,7 @@
     "KeyboardInputMixin",
     "LoadingOverlayAccessor",
     "LocalPlayerMixin",
+    "MessageBoxMixin",
     "MinecraftMixin",
     "MultiPackResourceManagerMixin",
     "ParticleEngineMixin",
@@ -17,7 +18,8 @@
     "ReloadableResourceManagerMixin",
     "RenderSystemMixin",
     "SoundEngineMixin",
-    "WaitingForPlayerChunkMixin"
+    "WaitingForPlayerChunkMixin",
+    "WindowInitFailedMixin"
   ],
   "injectors": {
     "defaultRequire": 1

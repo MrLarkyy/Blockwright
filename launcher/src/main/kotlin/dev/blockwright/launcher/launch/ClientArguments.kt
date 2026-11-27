@@ -12,7 +12,10 @@ import java.nio.file.Path
  * client never talks to Mojang with a fake identity.
  */
 class ClientArguments(private val rules: RuleEvaluator) {
-    /** [classpath] is the Fabric runtime followed by the version's classpath (client jar last). */
+    /**
+     * [classpath] is the Fabric runtime followed by the version's classpath (client jar last); [statusToken] is the
+     * launch's secret the agent writes into each status line.
+     */
     data class Inputs(
         val config: ClientLaunchConfig,
         val classpath: List<Path>,
@@ -20,6 +23,7 @@ class ClientArguments(private val rules: RuleEvaluator) {
         val assetsDir: Path,
         val librariesDir: Path,
         val parentPid: Long,
+        val statusToken: String,
     )
 
     fun build(inputs: Inputs): List<String> {
@@ -52,6 +56,7 @@ class ClientArguments(private val rules: RuleEvaluator) {
             addAll(config.profile.jvmFlags)
             add("-D$PROFILE_PROPERTY=${config.profile.agentProfile}")
             add("-D$PARENT_PID_PROPERTY=${inputs.parentPid}")
+            add("-D${AgentStatusLine.TOKEN_PROPERTY}=${inputs.statusToken}")
             add("-D$FABRIC_ADD_MODS=${config.agentJar.toAbsolutePath()}")
             add("-D$DISCOVERY_PROPERTY=$UNREACHABLE_SERVICES")
             config.trace?.let {

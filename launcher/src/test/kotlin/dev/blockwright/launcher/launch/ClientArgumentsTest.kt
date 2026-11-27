@@ -18,7 +18,7 @@ class ClientArgumentsTest {
     private fun build(profile: LaunchProfile = LaunchProfile.LOGIC, username: String = "bwlogic", trace: TraceRequest? = null): List<String> {
         val version = LaunchFixtures.version(root)
         val config = ClientLaunchConfig(version, root.resolve("agent.jar"), profile, "127.0.0.1", 25565, username, root.resolve("out"), trace = trace)
-        val inputs = ClientArguments.Inputs(config, listOf(root.resolve("fabric.jar")) + version.classpath, root.resolve("game"), root.resolve("assets"), root.resolve("libraries"), 4242)
+        val inputs = ClientArguments.Inputs(config, listOf(root.resolve("fabric.jar")) + version.classpath, root.resolve("game"), root.resolve("assets"), root.resolve("libraries"), 4242, TOKEN)
         return ClientArguments(RuleEvaluator(Platform("linux", "x86_64", "6.8"))).build(inputs)
     }
 
@@ -31,6 +31,7 @@ class ClientArgumentsTest {
         assertTrue(jvm.containsAll(LaunchProfile.LOGIC.jvmFlags))
         assertTrue("-Dblockwright.profile=logic" in jvm)
         assertTrue("-Dblockwright.parentPid=4242" in jvm)
+        assertTrue("-Dblockwright.statusToken=$TOKEN" in jvm)
         assertTrue("-Dfabric.addMods=${root.resolve("agent.jar").toAbsolutePath()}" in jvm)
         assertEquals(listOf(root.resolve("fabric.jar"), root.resolve("libraries/a.jar"), root.resolve("versions/client.jar")).joinToString(File.pathSeparator), jvm[jvm.indexOf("-cp") + 1])
     }
@@ -69,5 +70,9 @@ class ClientArgumentsTest {
     @Test
     fun anInvalidUsernameNeverReachesTheCommandLine() {
         assertThrows<LaunchException> { build(username = "bad name\n-Dx=y") }
+    }
+
+    private companion object {
+        const val TOKEN = "0123456789abcdef0123456789abcdef"
     }
 }

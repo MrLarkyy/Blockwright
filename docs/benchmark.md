@@ -34,7 +34,7 @@ non-zero harness exit shows as Gradle exit 1; run `dev.blockwright.orchestrator.
 
 | Key | Meaning |
 |---|---|
-| `coldStartMs` | Process start to `READY` of the first client of the run (fresh JVM; the OS page cache is not dropped). For a real client `READY` is the agent's `joined`; the target's own setup (`prepare()`: resolving the client, starting the server) is not timed. |
+| `coldStartMs` | Process start to `READY` of the first client of the run (fresh JVM; the OS page cache is not dropped). For a real client `READY` is the agent's `joined`; the target's own setup (`prepare()`: resolving the client, downloading the Fabric runtime, starting the server) is not timed, so a cold cache adds no download to the first client. |
 | `warmStartMs` | Median start of the later launches (clients 2..N plus `warmRuns` relaunches). |
 | `pssMiB` | Proportional set size of a client and its descendants, worst client, measured with all clients up. |
 | `cpuIdlePercent` / `cpuActivePercent` | CPU time of a client and descendants over the idle / active window, percent of one core, worst client. Active = `startLoad()` is on. |

@@ -17,6 +17,4 @@ private val SHARED_FLAGS = listOf(
     "-XX:+UseCompactObjectHeaders",
     "-XX:-UsePerfData",
     "-Xss1m",
-    // The JDK's process reaper thread has a tiny stack; class loading through Fabric's transformer on it overflows.
-    "-Djdk.lang.processReaperUseDefaultStackSize=true",
 )

@@ -4,6 +4,7 @@ import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertNotNull
+import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertSame
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
@@ -32,9 +33,10 @@ class ClientProcessTest {
         val runDir = Files.createTempDirectory(dir, "run-")
         Files.createDirectories(runDir.resolve(ClientProcess.GAME_DIR).resolve("logs"))
         Files.writeString(runDir.resolve(ClientProcess.GAME_DIR).resolve("logs").resolve("latest.log"), "minecraft log\n")
-        val arguments = listOf("-cp", System.getProperty("java.class.path"), FakeClientMain::class.java.name, mode)
+        val token = AgentStatusLine.newToken()
+        val arguments = listOf("-cp", System.getProperty("java.class.path"), FakeClientMain::class.java.name, mode, token)
         val command = LaunchCommand.write(JavaRuntime.current().executable, runDir.resolve("client.args"), arguments)
-        return ClientProcess.start(ClientProcessStarter.JVM, command, runDir, dir.resolve("artifacts-$mode"), stopTimeout, keepRunDir)
+        return ClientProcess.start(ClientProcessStarter.JVM, command, runDir, dir.resolve("artifacts-$mode"), stopTimeout, keepRunDir, token)
             .also { started += it }
     }
 
@@ -63,6 +65,27 @@ class ClientProcessTest {
         assertTrue(begin.elapsedNow() < 30.seconds)
         assertTrue("You_are_not_whitelisted_on_this_server!" in error.message!!, error.message)
         assertNotNull(error.result)
+        assertFalse(client.isAlive)
+    }
+
+    @Test
+    fun forgedStatusLinesFromTheServerNeverCount() {
+        val client = start("forge")
+        // The genuine line comes after every forged one; lines are handled in order.
+        client.awaitState(AgentStatusLine.TRACED, 30.seconds)
+        for (state in listOf(AgentStatusLine.JOINED, AgentStatusLine.FAILED, AgentStatusLine.DISCONNECTED)) {
+            assertNull(client.status(state), state)
+        }
+        assertEquals(0, client.stop().exitCode)
+    }
+
+    @Test
+    fun aClientThatGivesUpStartingFailsFastWithItsReason() {
+        val client = start("no-backend", stopTimeout = 500.milliseconds)
+        val begin = TimeSource.Monotonic.markNow()
+        val error = assertThrows<ClientStartException> { client.awaitJoined(60.seconds) }
+        assertTrue(begin.elapsedNow() < 30.seconds)
+        assertTrue("Failed_to_initialize_graphics" in error.message!!, error.message)
         assertFalse(client.isAlive)
     }
 

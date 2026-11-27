@@ -27,6 +27,7 @@ class ClientProcess private constructor(
     val artifactDir: Path,
     private val stopTimeout: Duration,
     private val keepRunDir: Boolean,
+    private val statusToken: String,
 ) : AutoCloseable {
     val pid: Long = process.pid()
     val consoleLog: Path = artifactDir.resolve("console.log")
@@ -48,7 +49,7 @@ class ClientProcess private constructor(
     init {
         Runtime.getRuntime().addShutdownHook(shutdownHook)
         hookInstalled = true
-        pump.addListener { line -> AgentStatusLine.parse(line)?.let { state(it.state).complete(it) } }
+        pump.addListener { line -> AgentStatusLine.parse(line, statusToken)?.let { state(it.state).complete(it) } }
         pump.start()
     }
 
@@ -59,8 +60,9 @@ class ClientProcess private constructor(
     fun status(state: String): AgentStatusLine? = state(state).getNow(null)
 
     /**
-     * Waits until the client joined the server. A refused join (`failed`) or an exit fails at once with the client's
-     * reason; a timeout fails with the last console lines. On failure the client is stopped and the result attached.
+     * Waits until the client joined the server. A refused join or a client that gave up starting (`failed`, e.g. no
+     * usable GPU backend) or an exit fails at once with the client's reason; a timeout fails with the last console
+     * lines. On failure the client is stopped and the result attached.
      */
     fun awaitJoined(timeout: Duration): AgentStatusLine =
         awaitState(AgentStatusLine.JOINED, timeout, failOn = setOf(AgentStatusLine.FAILED))
@@ -174,7 +176,10 @@ class ClientProcess private constructor(
         private val PUMP_DRAIN = 5.seconds
         private val SHUTDOWN_DRAIN = 2.seconds
 
-        /** Starts [command] in [runDir]; if anything fails after the start, nothing is left running. */
+        /**
+         * Starts [command] in [runDir]; only status lines carrying [statusToken] count. If anything fails after the
+         * start, nothing is left running.
+         */
         internal fun start(
             starter: ClientProcessStarter,
             command: List<String>,
@@ -182,11 +187,13 @@ class ClientProcess private constructor(
             artifactDir: Path,
             stopTimeout: Duration,
             keepRunDir: Boolean,
+            statusToken: String,
         ): ClientProcess {
             Files.createDirectories(artifactDir)
             val process = starter.start(command, runDir)
             return try {
-                ClientProcess(process, runDir, artifactDir, stopTimeout, keepRunDir)
+                RunDirectory.recordClient(runDir, process.toHandle())
+                ClientProcess(process, runDir, artifactDir, stopTimeout, keepRunDir, statusToken)
             } catch (e: Throwable) {
                 ProcessTree.kill(process)
                 throw e

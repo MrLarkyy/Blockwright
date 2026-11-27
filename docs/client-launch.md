@@ -59,8 +59,8 @@ parity test below checks it.
 
 ### JVM flags and options
 
-`LOGIC` and `REFERENCE`: `-Xms256m -Xmx1G -XX:+UseSerialGC -XX:+UseCompactObjectHeaders -XX:-UsePerfData -Xss1m
--Djdk.lang.processReaperUseDefaultStackSize=true`; `LOGIC` adds `-Djava.awt.headless=true`. The version's own JVM
+`LOGIC` and `REFERENCE`: `-Xms256m -Xmx1G -XX:+UseSerialGC -XX:+UseCompactObjectHeaders -XX:-UsePerfData -Xss1m`;
+`LOGIC` adds `-Djava.awt.headless=true`. The version's own JVM
 arguments follow (natives, `-cp`), then Fabric's `KnotClient` main class, the version's game arguments with the
 `is_quick_play_multiplayer` feature only (never demo mode or a custom resolution) and `--graphicsBackend opengl` (Vulkan
 is never probed). Everything goes through an `@argfile` in the run directory: the classpath alone exceeds the Windows
@@ -83,7 +83,8 @@ The launcher build pins the Fabric loader and the libraries of its `fabric-loade
 from Gradle's resolved `fabricRuntime` configuration into `fabric-runtime.json`: coordinates, SHA-1, size and
 repository (`maven.fabricmc.net` for `net.fabricmc`, Maven Central otherwise). At launch each jar is downloaded into the
 cache's `libraries/` with the usual limits and kept only when SHA-1 and size match; `DownloadPolicy` allows exactly
-those two hosts besides Mojang's. Versions live in `gradle/libs.versions.toml` (`minecraft`, `fabric-loader`,
+those two hosts besides Mojang's. `ClientLauncher.prepare()` does that download ahead of time (the bench calls it
+before anything is timed); a launch after it only verifies the cached jars. Versions live in `gradle/libs.versions.toml` (`minecraft`, `fabric-loader`,
 `sponge-mixin`, `asm`).
 
 ## Checks before launch
@@ -94,19 +95,29 @@ at least the version JSON's `javaVersion.majorVersion`). Versions with only lega
 
 ## Status lines
 
-The agent prints `BLOCKWRIGHT_AGENT state=<state> key=value ...` on the client's stdout; values never contain
-whitespace (replaced by `_`), so a server's disconnect reason cannot forge a field.
+The agent prints `BLOCKWRIGHT_AGENT <token> state=<state> key=value ...` on the client's stdout. The token is a
+random 128-bit value the launcher creates for each launch and passes as `-Dblockwright.statusToken`; the launcher
+accepts only console lines that start with the prefix followed by that token. Server text that reaches the console
+(chat, a kick reason, also one with an embedded newline that starts a console line of its own) cannot know the token,
+so it cannot complete `joined`, `traced` or any other state. Values never contain whitespace (replaced by `_`), so a
+server's disconnect reason cannot forge a field either.
 
 | state | when | fields |
 |---|---|---|
 | `starting` | Fabric pre-launch | `profile` |
 | `joined` | first tick in a level with a player and no screen | `profile player video gpu sound assetReads soundLoadsBlocked` |
-| `failed` | disconnected screen before the join | `reason` |
+| `failed` | disconnected screen before the join, or Minecraft cannot create its window or GPU backend | `reason` |
 | `disconnected` | disconnected screen after the join | `reason` |
 | `tracing` / `traced` | movement trace started / written | `script ticks` / `ticks file` |
+| `alert` | Minecraft wanted to show a blocking error box | `reason` (the box's text) |
 | `stopping` | a stop was requested | `reason` (`stdin-closed`, `parent-exited`) |
 
 A logic client reports `video=dummy gpu=Blockwright_headless sound=off assetReads=0`.
+
+In both profiles Minecraft's blocking error boxes are not shown: nobody can click them in a client the launcher started,
+so a box would hang it until the join timeout (seen with no usable OpenGL under a display without GLX). The box's text
+becomes an `alert` line, and a window or GPU backend that cannot be created a `failed` line: `awaitJoined` fails at
+once with Minecraft's reason, as it does when the client process exits.
 
 ## Stopping and parent death
 
@@ -116,13 +127,21 @@ the client disconnects and exits 0; after `stopTimeout` (30 s) the launcher kill
 `stop()`, a JVM shutdown hook kills the tree and removes the run directory.
 
 When the owning JVM dies without hooks (Task Manager, `kill -9`, Gradle cancelling a bench on Windows), the client
-stops itself: its stdin reaches EOF and a watchdog on `-Dblockwright.parentPid` fires. Both go through one
-`ShutdownCoordinator`; if the client does not exit within 10 s it halts with code 70. Its `blockwright-client-*` run
-directory in the temp folder is then left behind.
+stops itself: its stdin reaches EOF and a watchdog on `-Dblockwright.parentPid` fires (its own thread polls the parent
+every 500 ms; never the JDK's process reaper thread, whose small stack overflows on Fabric class loading). Both go
+through one `ShutdownCoordinator`; if the client does not exit within 10 s it halts with code 70.
+
+Its `blockwright-client-*` run directory in the temp folder is left behind at first. Each run directory records the
+owning JVM and the client process (pid and start time) in `blockwright-owners`; the next `ClientLauncher.launch` in any
+JVM removes every such directory whose owner and client are both gone. A directory without that record or a symbolic
+link is never touched, and a still-locked one is tried again at the following launch.
 
 ## Artefacts
 
-`artifactDir/console.log` holds everything the client printed, `artifactDir/latest.log` Minecraft's own log. The run
+`artifactDir/console.log` holds everything the client printed, `artifactDir/latest.log` Minecraft's own log. Each
+console line is cut at 8192 characters (the rest is skipped, never buffered, and the line ends with
+`[<n> more chars cut]`), and only the last 50 lines are kept in memory for error messages, so server text cannot grow
+the launcher's heap. The run
 directory (`options.txt`, the argfile, the game directory) is removed after the stop unless `keepRunDir` is set; on
 Windows a directory still locked is kept and reported as `runDirKept`.
 
@@ -146,5 +165,5 @@ client and the Fabric runtime into the cache next to the default one (`blockwrig
 display, 30 s in the world, graceful stop, a refused join failing fast), `ClientParentDeathIntegrationTest` (the client
 exits within 20 s after its parent is killed) and `MovementParityIntegrationTest` (needs a display for the reference:
 skipped without one, unless `-Pblockwright.requireParity=true` makes that a failure; Linux CI runs it under `xvfb-run`
-with Mesa). Without the EULA flag every one of them is reported as skipped. In CI the `client-integration` job runs them
+with a 24-bit GLX screen and Mesa's llvmpipe software renderer). Without the EULA flag every one of them is reported as skipped. In CI the `client-integration` job runs them
 on Windows and Linux only on a manual `workflow_dispatch` with `accept_eula`.

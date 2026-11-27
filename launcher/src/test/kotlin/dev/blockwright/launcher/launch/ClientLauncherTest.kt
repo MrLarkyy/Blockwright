@@ -83,7 +83,29 @@ class ClientLauncherTest {
 
         assertEquals(1, starts.get())
         assertEquals(0, transport.calls.size)
-        assertEquals(before, runDirs())
+        assertEquals(emptySet<Path>(), runDirs() - before)
+    }
+
+    @Test
+    fun prepareDownloadsTheFabricRuntimeSoATimedLaunchOnlyVerifiesIt() {
+        val jar = "loader".toByteArray()
+        val runtime = FabricRuntime("0.20.1", listOf(FabricArtifact("a:b:1", Sha1.of(jar), jar.size.toLong(), "https://maven.fabricmc.net/")))
+        transport.put(runtime.artifacts.single().uri, jar)
+        LaunchFixtures.version(dir).classpath.forEach { Files.createDirectories(it.parent); Files.write(it, ByteArray(1)) }
+        val cache = CacheLayout(dir.resolve("cache"))
+        val launcher = ClientLauncher(
+            cache,
+            Downloader(transport, DownloadPolicy()) {},
+            starter = { _, _ -> starts.incrementAndGet(); throw java.io.IOException("cannot start") },
+            fabric = { runtime },
+        )
+
+        assertEquals(listOf(cache.library("a/b/1/b-1.jar")), launcher.prepare())
+        assertEquals(1, transport.calls.size)
+
+        assertThrows<java.io.IOException> { launcher.launch(config()) }
+        assertEquals(1, starts.get())
+        assertEquals(1, transport.calls.size, "the launch downloaded again")
     }
 
     private fun runDirs(): Set<Path> =

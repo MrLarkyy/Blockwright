@@ -22,4 +22,9 @@ class LaunchProfileTest {
         assertEquals("logic", LaunchProfile.LOGIC.agentProfile)
         assertEquals("reference", LaunchProfile.REFERENCE.agentProfile)
     }
+
+    @Test
+    fun noProfileChangesTheJdkProcessReaper() {
+        LaunchProfile.entries.forEach { profile -> assertFalse(profile.jvmFlags.any { "processReaper" in it }, profile.name) }
+    }
 }

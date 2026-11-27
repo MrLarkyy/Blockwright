@@ -2,6 +2,7 @@ package dev.blockwright.agent
 
 import dev.blockwright.agent.lifecycle.ParentWatchdog
 import dev.blockwright.agent.lifecycle.ShutdownCoordinator
+import dev.blockwright.agent.lifecycle.StartupFailures
 import dev.blockwright.agent.lifecycle.StdinEofWatcher
 import dev.blockwright.agent.trace.InputScript
 import dev.blockwright.agent.trace.MovementTracer
@@ -24,14 +25,24 @@ object Agent {
         onRequest = { reason -> status.emit("stopping", mapOf("reason" to reason)) },
     )
 
+    val startupFailures = StartupFailures { status.takeIf { profile != AgentProfile.NONE } }
+
     /** Set when the launcher asked for a movement trace (`blockwright.trace.out`). */
     @Volatile var tracer: MovementTracer? = null
         private set
 
     /** Called once from the pre-launch entrypoint, before Minecraft's main method runs. */
-    fun start(profile: AgentProfile, out: PrintStream, stdin: InputStream, parentPid: Long?, trace: Path? = null, script: InputScript? = null) {
+    fun start(
+        profile: AgentProfile,
+        out: PrintStream,
+        stdin: InputStream,
+        parentPid: Long?,
+        statusToken: String?,
+        trace: Path? = null,
+        script: InputScript? = null,
+    ) {
         this.profile = profile
-        statusWriter = AgentStatus(out)
+        statusWriter = AgentStatus(out, statusToken)
         if (profile == AgentProfile.NONE) return
         tracer = trace?.let { MovementTracer(it, script ?: InputScript.WALK_JUMP_STRAFE, status) }
         status.emit("starting", mapOf("profile" to profile.property))

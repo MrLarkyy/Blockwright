@@ -8,16 +8,23 @@ import org.junit.jupiter.api.Test
 import java.nio.file.Path
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicReference
 
 class ParentWatchdogTest {
     @Test
-    fun firesWhenTheWatchedProcessExits() {
+    fun firesOnItsOwnThreadWhenTheWatchedProcessExits() {
         val java = Path.of(System.getProperty("java.home"), "bin", "java").toString()
         val parent = ProcessBuilder(java, "-version").redirectErrorStream(true).start()
         val fired = CountDownLatch(1)
-        ParentWatchdog(parent.pid()) { fired.countDown() }.start()
+        val firedOn = AtomicReference<String>()
+        ParentWatchdog(parent.pid(), pollMillis = 20) {
+            firedOn.set(Thread.currentThread().name)
+            fired.countDown()
+        }.start()
         parent.inputStream.readAllBytes()
         assertTrue(fired.await(10, TimeUnit.SECONDS))
+        // Never the JDK's process reaper, whose small stack overflows on Fabric class loading.
+        assertEquals(ParentWatchdog.THREAD_NAME, firedOn.get())
     }
 
     @Test

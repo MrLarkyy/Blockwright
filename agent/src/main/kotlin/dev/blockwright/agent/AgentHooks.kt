@@ -11,7 +11,8 @@ import net.minecraft.client.player.LocalPlayer
 
 /**
  * The only entry points of the mixins: each mixin hooks one place in the client and calls one function here,
- * which decides from the profile. Nothing is cut unless the profile is logic.
+ * which decides from the profile. Nothing is cut unless the profile is logic; error boxes are replaced by status
+ * lines in both launcher profiles.
  */
 object AgentHooks {
     private const val CHUNK_SHIFT = 4
@@ -61,6 +62,13 @@ object AgentHooks {
     fun beforeKeyboardInput() {
         Agent.tracer?.takeIf { it.isActive }?.beforeInput(Minecraft.getInstance().options)
     }
+
+    /** True when Minecraft's blocking error box must not be shown (a launcher-started client has nobody to click it). */
+    @JvmStatic
+    fun replacesErrorBox(message: String?): Boolean = Agent.startupFailures.replacesErrorBox(message)
+
+    @JvmStatic
+    fun onWindowInitFailed(message: String?) = Agent.startupFailures.onWindowInitFailed(message)
 
     @JvmStatic
     fun afterPlayerTick(player: LocalPlayer) {
