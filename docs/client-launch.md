@@ -139,7 +139,8 @@ through one `ShutdownCoordinator`; if the client does not exit within 10 s it ha
 Its `blockwright-client-*` run directory in the temp folder is left behind at first. Each run directory records the
 owning JVM and the client process (pid and start time) in `blockwright-owners`; the next `ClientLauncher.launch` in any
 JVM removes every such directory whose owner and client are both gone. A directory without that record or a symbolic
-link is never touched, and a still-locked one is tried again at the following launch.
+link is never touched, and a still-locked one is tried again at the following launch. A directory kept with
+`keepRunDir` is marked `kept` in that file and is never swept.
 
 ## Artefacts
 

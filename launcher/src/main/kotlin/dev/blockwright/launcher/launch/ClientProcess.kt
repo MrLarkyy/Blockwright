@@ -137,6 +137,7 @@ class ClientProcess private constructor(
         synchronized(cleanupLock) {
             cleanup?.let { return it }
             val latestLog = copyLatestLog()
+            if (keepRunDir) runCatching { RunDirectory.markKept(runDir) }
             val runDirKept = keepRunDir || try {
                 !RunDirectory.delete(runDir)
             } catch (_: InterruptedException) {

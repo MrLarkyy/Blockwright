@@ -20,11 +20,15 @@ object RunDirectory {
     const val OWNERS_FILE = "blockwright-owners"
     private const val OWNER = "owner"
     private const val CLIENT = "client"
+    private const val KEPT = "kept"
     private const val START_TOLERANCE_MILLIS = 1000L
 
     fun create(): Path = Files.createTempDirectory(PREFIX).also { record(it, OWNER, ProcessHandle.current()) }
 
     fun recordClient(dir: Path, client: ProcessHandle) = record(dir, CLIENT, client)
+
+    /** Marks a directory the user asked to keep, so [sweep] never removes it. */
+    fun markKept(dir: Path) = record(dir, KEPT, ProcessHandle.current())
 
     @OptIn(ExperimentalPathApi::class)
     fun delete(dir: Path, attempts: Int = 5, pauseMillis: Long = 200): Boolean {
@@ -61,6 +65,7 @@ object RunDirectory {
         } catch (_: IOException) {
             return false
         }
+        if (KEPT in records) return false
         val owner = records[OWNER] ?: return false
         return !isAlive(owner) && records[CLIENT]?.let(::isAlive) != true
     }

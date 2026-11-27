@@ -52,6 +52,18 @@ class RunDirectoryTest {
     }
 
     @Test
+    fun aDirectoryMarkedKeptSurvivesASweepWithBothProcessesDead() {
+        val dead = deadPid()
+        val kept = runDir("kept", "owner $dead -\nclient $dead -\n")
+        val abandoned = runDir("abandoned", "owner $dead -\nclient $dead -\n")
+        RunDirectory.markKept(kept)
+
+        assertEquals(listOf(abandoned), RunDirectory.sweep(root))
+        assertTrue(Files.exists(kept))
+        assertFalse(Files.exists(abandoned))
+    }
+
+    @Test
     fun aReusedPidWithAnotherStartTimeCountsAsGone() {
         val reused = runDir("reused", "owner ${self.pid()} 0\n")
         assertEquals(listOf(reused), RunDirectory.sweep(root))
