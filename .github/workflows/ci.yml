@@ -94,3 +94,54 @@ jobs:
             server-runner/build/test-results
             server-runner/build/reports/tests
             server-runner/build/blockwright-artifacts
+
+  # Real 26.3 clients against a real Paper server: same EULA gate as server-integration. Windows and Linux start the
+  # logic client without any display; Linux also runs the parity reference (a real GL window) under xvfb with Mesa,
+  # where a missing display fails instead of skipping. The logic bench numbers go to the job summary.
+  client-integration:
+    if: github.event_name == 'workflow_dispatch' && inputs.accept_eula == true
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 40
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: '25'
+      - uses: gradle/actions/setup-gradle@v6
+        with:
+          cache-read-only: true
+      - name: Headless client and parent death (no display)
+        run: env -u DISPLAY -u WAYLAND_DISPLAY ./gradlew :launcher:integrationTest --tests '*HeadlessClient*' --tests '*ParentDeath*' -Pblockwright.acceptEula=true --console=plain --no-daemon
+      - name: Install a virtual display with Mesa
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y xvfb libgl1-mesa-dri
+      - name: Movement parity (reference under xvfb)
+        if: runner.os == 'Linux'
+        run: xvfb-run -a ./gradlew :launcher:integrationTest --tests '*MovementParity*' -Pblockwright.acceptEula=true -Pblockwright.requireParity=true --console=plain --no-daemon
+      - name: Bench the logic profile
+        run: ./gradlew :orchestrator:bench -Pbench.profile=logic -Pblockwright.acceptEula=true --console=plain --no-daemon
+      - name: Publish bench summary
+        if: always()
+        run: |
+          if [ -f orchestrator/build/reports/bench/bench-summary.md ]; then
+            echo "### logic bench on ${{ matrix.os }}" >> "$GITHUB_STEP_SUMMARY"
+            cat orchestrator/build/reports/bench/bench-summary.md >> "$GITHUB_STEP_SUMMARY"
+          fi
+      - name: Upload client logs, test results and bench report
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: client-integration-${{ matrix.os }}
+          path: |
+            launcher/build/test-results
+            launcher/build/reports/tests
+            launcher/build/blockwright-artifacts
+            orchestrator/build/reports/bench
