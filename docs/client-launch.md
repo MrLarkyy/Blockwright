@@ -24,6 +24,12 @@ JdkHttpTransport(DownloadPolicy()).use { transport ->
 }
 ```
 
+The cache is shared by processes: concurrent resolves lock each entry with an OS file lock and transfer it once. The lock files live in `<cache>/locks/` (named by a hash of the entry's path), never beside a library, asset or jar.
+
+### Refresh policy
+
+A cached version JSON is reused without network while it is younger than the `RefreshPolicy` given to `VersionResolver` (`RefreshPolicy.DEFAULT`: 24 hours). Its age is the modification time of the `<id>.json.sha1` record, i.e. the last check against the version manifest. Once due, the resolve fetches the manifest once (a single attempt, never the cached manifest); when it lists another SHA-1 for the version, the new JSON replaces the cached one. `RefreshPolicy.NEVER` trusts the cache forever, `RefreshPolicy.ALWAYS` checks on every resolve, `RefreshPolicy.after(duration)` picks the period. The refresh is best effort: offline, or when the manifest or the new JSON cannot be fetched, the cached JSON is used (no error), and the next check waits for the policy again. The files a JSON names are still verified by SHA-1 on every resolve.
+
 ## Profiles
 
 | profile | display | GPU | sound | render assets | use |

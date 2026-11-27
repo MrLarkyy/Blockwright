@@ -1,6 +1,7 @@
 package dev.blockwright.launcher.download
 
 import dev.blockwright.launcher.FakeTransport
+import dev.blockwright.launcher.cache.CacheLayout
 import org.junit.jupiter.api.Assertions.assertArrayEquals
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
@@ -33,8 +34,10 @@ class DownloaderTest {
     private val target by lazy { dir.resolve("libraries/test/lib-1.0.jar") }
     private val part by lazy { target.resolveSibling("lib-1.0.jar.part") }
 
+    private fun lockOf(file: Path): Path = CacheLayout(dir).lockFile(file)
+
     private fun spec(uri: URI = url, size: Long? = payload.size.toLong(), sha1: String? = Sha1.of(payload)) =
-        DownloadSpec(uri, target, sha1, size, size ?: 1_000_000)
+        DownloadSpec(uri, target, sha1, size, size ?: 1_000_000, lockOf(target))
 
     private fun assertVerified() {
         assertArrayEquals(payload, Files.readAllBytes(target))
@@ -102,7 +105,7 @@ class DownloaderTest {
     @Test
     fun fileWithoutKnownSizeIsCappedAtMaxBytes() {
         val error = assertThrows<DownloadException> {
-            downloader.ensure(DownloadSpec(url, target, null, null, maxBytes = 1000))
+            downloader.ensure(DownloadSpec(url, target, null, null, maxBytes = 1000, lockFile = lockOf(target)))
         }
         assertTrue(error.message!!.contains("larger"), error.message)
         assertFalse(Files.exists(target))
@@ -211,7 +214,7 @@ class DownloaderTest {
     @Test
     fun emptyFileIsRequestedAndInstalled() {
         val empty = transport.put("https://piston-meta.mojang.com/empty.json", ByteArray(0))
-        downloader.ensure(DownloadSpec(empty, target, Sha1.of(ByteArray(0)), 0, 0))
+        downloader.ensure(DownloadSpec(empty, target, Sha1.of(ByteArray(0)), 0, 0, lockOf(target)))
         assertEquals(0L, Files.size(target))
         assertEquals("da39a3ee5e6b4b0d3255bfef95601890afd80709", Sha1.of(target))
         assertEquals(listOf(FakeTransport.Call(empty, 0)), transport.calls)
@@ -289,8 +292,8 @@ class DownloaderTest {
         val missing = URI("https://libraries.minecraft.net/test/missing.jar")
         val specs = listOf(
             spec(),
-            DownloadSpec(other, dir.resolve("other.jar"), Sha1.of("other".toByteArray()), 5, 5),
-            DownloadSpec(missing, dir.resolve("missing.jar"), "0".repeat(40), 5, 5),
+            DownloadSpec(other, dir.resolve("other.jar"), Sha1.of("other".toByteArray()), 5, 5, lockOf(dir.resolve("other.jar"))),
+            DownloadSpec(missing, dir.resolve("missing.jar"), "0".repeat(40), 5, 5, lockOf(dir.resolve("missing.jar"))),
         )
         assertThrows<DownloadException> { downloader.ensureAll(specs) }
         assertFalse(Files.exists(dir.resolve("missing.jar")))
@@ -301,7 +304,7 @@ class DownloaderTest {
         val bodies = (1..20).map { "file-$it".toByteArray() }
         val specs = bodies.mapIndexed { i, body ->
             val uri = transport.put("https://libraries.minecraft.net/test/f$i.jar", body)
-            DownloadSpec(uri, dir.resolve("f$i.jar"), Sha1.of(body), body.size.toLong(), body.size.toLong())
+            DownloadSpec(uri, dir.resolve("f$i.jar"), Sha1.of(body), body.size.toLong(), body.size.toLong(), lockOf(dir.resolve("f$i.jar")))
         }
         Downloader(transport, DownloadPolicy(parallelism = 3)).ensureAll(specs)
         specs.forEachIndexed { i, s -> assertArrayEquals(bodies[i], Files.readAllBytes(s.target)) }

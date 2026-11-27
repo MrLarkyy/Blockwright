@@ -1,5 +1,6 @@
 package dev.blockwright.launcher.natives
 
+import dev.blockwright.launcher.cache.CacheLayout
 import dev.blockwright.launcher.download.CacheFileLock
 import dev.blockwright.launcher.download.DownloadException
 import java.io.IOException
@@ -27,10 +28,11 @@ import kotlin.io.path.deleteRecursively
  * staging or backup directory found there can only be a leftover. Leftovers are removed as far as possible: one
  * that cannot be deleted yet (a file in it still open) never fails an extraction, the next one tries again.
  */
-class NativesExtractor(private val limits: ExtractionLimits = ExtractionLimits()) {
+class NativesExtractor(private val cache: CacheLayout, private val limits: ExtractionLimits = ExtractionLimits()) {
     /** Returns [target], which always exists afterwards (empty when there is nothing to extract). */
-    fun extract(jars: List<NativeJar>, target: Path): Path = CacheFileLock.withLock(target) {
+    fun extract(jars: List<NativeJar>, target: Path): Path = CacheFileLock.withLock(cache.lockFile(target)) {
         val marker = NativesMarker(jars)
+        Files.createDirectories(target.parent)
         removeLeftovers(target)
         if (!marker.matches(target)) replace(jars, target, marker)
         target
@@ -55,7 +57,6 @@ class NativesExtractor(private val limits: ExtractionLimits = ExtractionLimits()
     }
 
     private fun replace(jars: List<NativeJar>, target: Path, marker: NativesMarker) {
-        Files.createDirectories(target.parent)
         val staging = target.resolveSibling("${target.fileName}$STAGING${UUID.randomUUID()}")
         try {
             Files.createDirectory(staging)

@@ -1,6 +1,7 @@
 package dev.blockwright.launcher
 
 import dev.blockwright.launcher.cache.CacheLayout
+import dev.blockwright.launcher.cache.RefreshPolicy
 import dev.blockwright.launcher.download.DownloadException
 import dev.blockwright.launcher.download.DownloadPolicy
 import dev.blockwright.launcher.download.Sha1
@@ -17,6 +18,8 @@ import org.junit.jupiter.api.io.TempDir
 import java.net.URI
 import java.nio.file.Files
 import java.nio.file.Path
+import java.nio.file.attribute.FileTime
+import java.time.Instant
 import java.time.Duration
 import java.util.concurrent.CyclicBarrier
 import java.util.concurrent.Executors
@@ -31,9 +34,26 @@ class VersionResolverTest {
     private val cache by lazy { CacheLayout(root) }
     private val linux = Platform("linux", "x86_64", "6.8.0")
 
-    private fun resolver() = VersionResolver(cache, transport, DownloadPolicy(retryDelay = Duration.ZERO), platform = linux)
+    private fun resolver(refresh: RefreshPolicy = RefreshPolicy.DEFAULT) =
+        VersionResolver(cache, transport, DownloadPolicy(retryDelay = Duration.ZERO), platform = linux, refresh = refresh)
 
-    private fun resolve(includeAssets: Boolean = false) = resolver().resolve(ResolveRequest(FakeMojang.VERSION_ID, includeAssets))
+    private fun resolve(includeAssets: Boolean = false, refresh: RefreshPolicy = RefreshPolicy.DEFAULT) =
+        resolver(refresh).resolve(ResolveRequest(FakeMojang.VERSION_ID, includeAssets))
+
+    private val sidecar by lazy { cache.versionJsonSha1(FakeMojang.VERSION_ID) }
+
+    private fun ageTheCachedJson(by: Duration) {
+        Files.setLastModifiedTime(sidecar, FileTime.from(Instant.now().minus(by)))
+    }
+
+    /** The version JSON is re-published under the same URL with another main class; the manifest lists its new hash. */
+    private fun republish(): String {
+        val body = String(mojang.payloads.getValue("version")).replace("test.client.Main", "test.client.Republished").toByteArray()
+        val manifest = Files.readString(cache.manifest()).replace(mojang.sha1("version"), Sha1.of(body))
+        transport.put(FakeMojang.VERSION_URL, body)
+        transport.put(VersionResolver.MANIFEST_URI, manifest.toByteArray())
+        return Sha1.of(body)
+    }
 
     private fun library(path: String): Path = cache.library(path)
 
@@ -64,6 +84,17 @@ class VersionResolverTest {
     }
 
     @Test
+    fun noLockFileLiesBesideACachedFile() {
+        resolve(includeAssets = true)
+        val locks = cache.root.resolve("locks")
+        val stray = Files.walk(cache.root).use { s ->
+            s.filter { it.fileName.toString().endsWith(".lock") && !it.startsWith(locks) }.toList()
+        }
+        assertEquals(emptyList<Path>(), stray)
+        assertTrue(Files.list(locks).use { it.count() } > 0)
+    }
+
+    @Test
     fun secondResolveUsesTheCacheWithoutNetwork() {
         val first = resolve()
         transport.calls.clear()
@@ -73,6 +104,145 @@ class VersionResolverTest {
 
         assertEquals(emptyList<FakeTransport.Call>(), transport.calls)
         assertEquals(first, second)
+    }
+
+    @Test
+    fun staleJsonRepublishedUnderANewHashIsDownloadedAgain() {
+        resolve()
+        val newHash = republish()
+        ageTheCachedJson(Duration.ofDays(2))
+        transport.calls.clear()
+
+        val resolved = resolve()
+
+        assertEquals("test.client.Republished", resolved.mainClass)
+        assertEquals(newHash, Files.readString(sidecar))
+        assertEquals(newHash, Sha1.of(cache.versionJson(FakeMojang.VERSION_ID)))
+        assertEquals(1, transport.callsTo(VersionResolver.MANIFEST_URI))
+        assertEquals(1, transport.callsTo(URI(FakeMojang.VERSION_URL)))
+        assertFalse(Files.exists(cache.versionJson(FakeMojang.VERSION_ID).resolveSibling("1.0-test.json.refresh")))
+        transport.calls.clear()
+        resolve()
+        assertEquals(emptyList<FakeTransport.Call>(), transport.calls)
+    }
+
+    @Test
+    fun staleJsonWithTheSameHashChecksTheManifestOnceAndKeepsTheJson() {
+        resolve()
+        ageTheCachedJson(Duration.ofDays(2))
+        transport.calls.clear()
+
+        resolve()
+
+        assertEquals(listOf(FakeTransport.Call(VersionResolver.MANIFEST_URI, 0)), transport.calls)
+        assertTrue(Duration.between(Files.getLastModifiedTime(sidecar).toInstant(), Instant.now()) < Duration.ofMinutes(1))
+        transport.calls.clear()
+        resolve()
+        assertEquals(emptyList<FakeTransport.Call>(), transport.calls)
+    }
+
+    @Test
+    fun staleJsonOfflineResolvesFromTheCacheAndRetriesOnlyAfterTheNextPeriod() {
+        val first = resolve()
+        ageTheCachedJson(Duration.ofDays(2))
+        transport.offline = true
+        transport.calls.clear()
+
+        val second = resolve()
+
+        assertEquals(first, second)
+        assertEquals(listOf(FakeTransport.Call(VersionResolver.MANIFEST_URI, 0)), transport.calls)
+        assertTrue(Duration.between(Files.getLastModifiedTime(sidecar).toInstant(), Instant.now()) < Duration.ofMinutes(1))
+        transport.calls.clear()
+        resolve()
+        assertEquals(emptyList<FakeTransport.Call>(), transport.calls)
+    }
+
+    @Test
+    fun failedReplacementDownloadKeepsTheCachedJson() {
+        val first = resolve()
+        republish()
+        transport.remove(URI(FakeMojang.VERSION_URL))
+        ageTheCachedJson(Duration.ofDays(2))
+
+        val second = resolve()
+
+        assertEquals(first, second)
+        assertEquals(mojang.sha1("version"), Sha1.of(cache.versionJson(FakeMojang.VERSION_ID)))
+        assertEquals(mojang.sha1("version"), Files.readString(sidecar))
+    }
+
+    @Test
+    fun ioFailureDuringRefreshKeepsTheCachedJsonAndTouchesTheSidecar() {
+        val first = resolve()
+        republish()
+        Files.createDirectories(cache.versionJson(FakeMojang.VERSION_ID).resolveSibling("1.0-test.json.refresh").resolve("blocker"))
+        ageTheCachedJson(Duration.ofDays(2))
+
+        val second = resolve()
+
+        assertEquals(first, second)
+        assertEquals(mojang.sha1("version"), Files.readString(sidecar))
+        assertTrue(Duration.between(Files.getLastModifiedTime(sidecar).toInstant(), Instant.now()) < Duration.ofMinutes(1))
+    }
+
+    @Test
+    fun undecodableReplacementJsonKeepsTheCachedJsonAndSidecar() {
+        val first = resolve()
+        val body = "not json at all".toByteArray()
+        transport.put(FakeMojang.VERSION_URL, body)
+        transport.put(VersionResolver.MANIFEST_URI, Files.readString(cache.manifest()).replace(mojang.sha1("version"), Sha1.of(body)).toByteArray())
+        ageTheCachedJson(Duration.ofDays(2))
+
+        val second = resolve()
+
+        assertEquals(first, second)
+        assertEquals(mojang.sha1("version"), Sha1.of(cache.versionJson(FakeMojang.VERSION_ID)))
+        assertEquals(mojang.sha1("version"), Files.readString(sidecar))
+        assertTrue(Duration.between(Files.getLastModifiedTime(sidecar).toInstant(), Instant.now()) < Duration.ofMinutes(1))
+    }
+
+    @Test
+    fun staleJsonIsNotCheckedWhenTheOnlyManifestIsTheCachedOne() {
+        resolve()
+        republish()
+        transport.remove(VersionResolver.MANIFEST_URI)
+        ageTheCachedJson(Duration.ofDays(2))
+
+        assertEquals("test.client.Main", resolve().mainClass)
+    }
+
+    @Test
+    fun neverTrustsTheCachedJsonWhateverItsAge() {
+        resolve()
+        republish()
+        ageTheCachedJson(Duration.ofDays(3650))
+        transport.calls.clear()
+
+        assertEquals("test.client.Main", resolve(refresh = RefreshPolicy.NEVER).mainClass)
+        assertEquals(emptyList<FakeTransport.Call>(), transport.calls)
+    }
+
+    @Test
+    fun alwaysChecksTheManifestOnEveryResolve() {
+        resolve()
+        transport.calls.clear()
+
+        resolve(refresh = RefreshPolicy.ALWAYS)
+        resolve(refresh = RefreshPolicy.ALWAYS)
+
+        assertEquals(2, transport.callsTo(VersionResolver.MANIFEST_URI))
+    }
+
+    @Test
+    fun freshJsonWithinTheMaxAgeMakesNoCall() {
+        resolve()
+        ageTheCachedJson(Duration.ofHours(1))
+        transport.calls.clear()
+
+        resolve(refresh = RefreshPolicy.after(Duration.ofHours(2)))
+
+        assertEquals(emptyList<FakeTransport.Call>(), transport.calls)
     }
 
     @Test

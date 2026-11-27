@@ -18,19 +18,18 @@ class CacheFileLockTest {
     @TempDir
     lateinit var dir: Path
 
-    private val target by lazy { dir.resolve("libraries/a.jar") }
-    private val lockFile by lazy { dir.resolve("libraries/a.jar.lock") }
+    private val lockFile by lazy { dir.resolve("locks/a.lock") }
 
     @Test
     fun anotherProcessCannotTakeTheLockWhileItIsHeld() {
-        val whileHeld = CacheFileLock.withLock(target) { probeFromAnotherProcess() }
+        val whileHeld = CacheFileLock.withLock(lockFile) { probeFromAnotherProcess() }
         assertEquals("locked", whileHeld)
         assertEquals("free", probeFromAnotherProcess())
     }
 
     @Test
     fun anotherChannelInThisJvmCannotTakeTheLockWhileItIsHeld() {
-        val acquired = CacheFileLock.withLock(target) {
+        val acquired = CacheFileLock.withLock(lockFile) {
             FileChannel.open(lockFile, CREATE, WRITE).use { channel ->
                 try {
                     channel.tryLock()?.also { it.release() } != null
@@ -51,7 +50,7 @@ class CacheFileLockTest {
             thread {
                 start.await()
                 repeat(20) {
-                    CacheFileLock.withLock(target) {
+                    CacheFileLock.withLock(lockFile) {
                         maxInside.accumulateAndGet(inside.incrementAndGet(), ::maxOf)
                         Thread.sleep(1)
                         inside.decrementAndGet()
